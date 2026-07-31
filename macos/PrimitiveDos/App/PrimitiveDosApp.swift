@@ -5,6 +5,7 @@ import SwiftUI
 struct PrimitiveDosApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var state = AppState()
+    @AppStorage("appearanceMode") private var appearanceMode = AppAppearance.system.rawValue
 
     var body: some Scene {
         WindowGroup {
@@ -45,6 +46,17 @@ struct PrimitiveDosApp: App {
                 .keyboardShortcut(".", modifiers: .command)
                 .disabled(!state.isBusy)
             }
+            CommandGroup(before: .toolbar) {
+                Picker("Appearance", selection: $appearanceMode) {
+                    ForEach(AppAppearance.allCases) { appearance in
+                        Text(appearance.label).tag(appearance.rawValue)
+                    }
+                }
+            }
+        }
+
+        Settings {
+            SettingsView()
         }
     }
 }

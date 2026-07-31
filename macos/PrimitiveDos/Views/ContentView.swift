@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @Environment(AppState.self) private var state
     @State private var showInspector = true
+    @AppStorage("appearanceMode") private var appearanceMode = AppAppearance.system.rawValue
 
     var body: some View {
         @Bindable var state = state
@@ -55,6 +56,7 @@ struct ContentView: View {
             }
         }
         .navigationTitle("Primitive Dos")
+        .preferredColorScheme(AppAppearance(rawValue: appearanceMode)?.colorScheme)
         .alert("Something went wrong", isPresented: errorBinding) {
             Button("OK", role: .cancel) {}
         } message: {
