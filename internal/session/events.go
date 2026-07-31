@@ -33,15 +33,16 @@ type StartedPayload struct {
 }
 
 type BatchPayload struct {
-	SessionID    string   `json:"sessionId"`
-	Fragments    []string `json:"fragments,omitempty"`
-	SnapshotJpeg string   `json:"snapshotJpeg,omitempty"`
-	PreviewMode  string   `json:"previewMode"`
-	ShapesDone   int      `json:"shapesDone"`
-	TotalShapes  int      `json:"totalShapes"`
-	Score        float64  `json:"score"`
-	ElapsedMs    int64    `json:"elapsedMs"`
-	ShapesPerSec float64  `json:"shapesPerSec"`
+	SessionID    string        `json:"sessionId"`
+	Fragments    []string      `json:"fragments,omitempty"`
+	Shapes       []ShapeRecord `json:"shapes,omitempty"`
+	SnapshotJpeg string        `json:"snapshotJpeg,omitempty"`
+	PreviewMode  string        `json:"previewMode"`
+	ShapesDone   int           `json:"shapesDone"`
+	TotalShapes  int           `json:"totalShapes"`
+	Score        float64       `json:"score"`
+	ElapsedMs    int64         `json:"elapsedMs"`
+	ShapesPerSec float64       `json:"shapesPerSec"`
 }
 
 type StatePayload struct {

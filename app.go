@@ -1,15 +1,11 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"encoding/base64"
 	"fmt"
-	"image/jpeg"
 	"os/exec"
 	"sync"
 
-	"github.com/nfnt/resize"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"github.com/jmousseau72/primitive-dos/internal/primitive"
@@ -62,27 +58,10 @@ func (a *App) SelectOutputDir(defaultDir string) (string, error) {
 	})
 }
 
-type InputInfo struct {
-	Path         string `json:"path"`
-	Width        int    `json:"width"`
-	Height       int    `json:"height"`
-	ThumbJpegB64 string `json:"thumbJpegB64"`
-}
-
 // InspectInput loads an image and returns its dimensions plus a small
 // thumbnail for the source preview corner.
-func (a *App) InspectInput(path string) (InputInfo, error) {
-	img, err := session.LoadInput(path, 0)
-	if err != nil {
-		return InputInfo{}, fmt.Errorf("could not read image: %w", err)
-	}
-	info := InputInfo{Path: path, Width: img.Bounds().Dx(), Height: img.Bounds().Dy()}
-	thumb := resize.Thumbnail(320, 320, img, resize.Bilinear)
-	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, thumb, &jpeg.Options{Quality: 80}); err == nil {
-		info.ThumbJpegB64 = base64.StdEncoding.EncodeToString(buf.Bytes())
-	}
-	return info, nil
+func (a *App) InspectInput(path string) (session.InputInfo, error) {
+	return session.InspectInput(path, 320)
 }
 
 // StartRender validates params, spins up a new session, and returns its id.

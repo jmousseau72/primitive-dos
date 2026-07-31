@@ -57,6 +57,11 @@ type Params struct {
 	StrokeWidth float64          `json:"strokeWidth"` // bezier stroke width; 0 = auto
 	RunMode     string           `json:"runMode"`     // "" or RunCount/RunForever/RunScore/RunDraw
 	TargetScore float64          `json:"targetScore"` // similarity %, for RunScore
+	// EmitShapeData switches the preview stream from SVG fragment strings to
+	// structured ShapeRecords, and disables the raster fallback (that limit
+	// exists only because WKWebView chokes on huge SVG DOMs; native renderers
+	// draw incrementally and handle any count).
+	EmitShapeData bool `json:"emitShapeData,omitempty"`
 	AutoSave    *AutoSaveOptions `json:"autoSave,omitempty"`
 	// Stages, when non-empty, overrides Mode/ShapeCount/Alpha/Repeat and
 	// reproduces the CLI's repeatable -n flag.
@@ -295,6 +300,7 @@ func (s *RenderSession) run() {
 	start := time.Now()
 	lastFlush := start
 	var fragments []string
+	var records []ShapeRecord
 	rate := 0.0
 
 	flush := func() {
@@ -313,10 +319,13 @@ func (s *RenderSession) run() {
 				batch.SnapshotJpeg = s.encodeSnapshot()
 				s.lastSnapshot = time.Now()
 			}
+		} else if p.EmitShapeData {
+			batch.Shapes = records
 		} else {
 			batch.Fragments = fragments
 		}
 		fragments = nil
+		records = nil
 		lastFlush = time.Now()
 		s.emit(EvtBatch, batch)
 	}
@@ -330,13 +339,14 @@ func (s *RenderSession) run() {
 		stepStart := time.Now()
 		s.mu.Lock()
 		model.Step(primitive.ShapeType(stage.Mode), stage.Alpha, stage.Repeat)
-		added := s.collectNewShapes()
+		addedFrags, addedRecs := s.collectNewShapes()
 		s.mu.Unlock()
 		s.stepsDone++
 
+		addedCount := len(addedFrags) + len(addedRecs)
 		stepDur := time.Since(stepStart).Seconds()
 		if stepDur > 0 {
-			instant := float64(len(added)) / stepDur
+			instant := float64(addedCount) / stepDur
 			if rate == 0 {
 				rate = instant
 			} else {
@@ -345,13 +355,16 @@ func (s *RenderSession) run() {
 		}
 
 		if !s.previewRaster {
-			fragments = append(fragments, added...)
-			if s.lastShapeIdx > svgPreviewShapeLimit {
+			fragments = append(fragments, addedFrags...)
+			records = append(records, addedRecs...)
+			// The raster fallback exists for WKWebView's SVG-DOM limits;
+			// structured-data consumers render incrementally at any count.
+			if !p.EmitShapeData && s.lastShapeIdx > svgPreviewShapeLimit {
 				s.previewRaster = true
 			}
 		}
 
-		if len(fragments) >= batchMaxFragments || time.Since(lastFlush) >= batchFlushInterval {
+		if len(fragments)+len(records) >= batchMaxFragments || time.Since(lastFlush) >= batchFlushInterval {
 			flush()
 		}
 
@@ -419,19 +432,24 @@ func (s *RenderSession) finish(start time.Time, cancelled bool) {
 	})
 }
 
-// collectNewShapes renders SVG fragments for shapes appended since the last
-// call (Step adds 1 + repeat shapes). The attrs format matches Model.SVG()
-// exactly, so the streamed preview is built from the same strings the final
-// SVG export will contain. Caller must hold s.mu.
-func (s *RenderSession) collectNewShapes() []string {
-	var out []string
+// collectNewShapes serializes shapes appended since the last call (Step adds
+// 1 + repeat shapes) — as SVG fragment strings matching Model.SVG() exactly,
+// or as structured ShapeRecords when EmitShapeData is set. Caller must hold
+// s.mu.
+func (s *RenderSession) collectNewShapes() ([]string, []ShapeRecord) {
+	var frags []string
+	var recs []ShapeRecord
 	for i := s.lastShapeIdx; i < len(s.model.Shapes); i++ {
 		c := s.model.Colors[i]
-		attrs := fmt.Sprintf("fill=\"#%02x%02x%02x\" fill-opacity=\"%f\"", c.R, c.G, c.B, float64(c.A)/255)
-		out = append(out, s.model.Shapes[i].SVG(attrs))
+		if s.params.EmitShapeData {
+			recs = append(recs, makeShapeRecord(s.model.Shapes[i], c))
+		} else {
+			attrs := fmt.Sprintf("fill=\"#%02x%02x%02x\" fill-opacity=\"%f\"", c.R, c.G, c.B, float64(c.A)/255)
+			frags = append(frags, s.model.Shapes[i].SVG(attrs))
+		}
 	}
 	s.lastShapeIdx = len(s.model.Shapes)
-	return out
+	return frags, recs
 }
 
 // encodeSnapshot returns a base64 JPEG of the current canvas, downscaled so
