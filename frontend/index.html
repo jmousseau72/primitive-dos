@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Primitive Dos</title>
+</head>
+<body>
+<div id="app">
+    <header id="titlebar">
+        <span class="app-title">Primitive Dos</span>
+    </header>
+
+    <main id="layout">
+        <section id="stage">
+            <div id="dropzone">
+                <svg viewBox="0 0 24 24" class="drop-icon" aria-hidden="true">
+                    <path d="M12 3 L20 17 H4 Z" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.9"/>
+                    <circle cx="17" cy="8" r="4" fill="currentColor" opacity="0.35"/>
+                    <rect x="4" y="13" width="7" height="7" rx="1" fill="currentColor" opacity="0.2"/>
+                </svg>
+                <h2>Drop an image here</h2>
+                <p class="hint">PNG, JPEG, GIF, BMP, TIFF or WebP</p>
+                <button id="btn-browse" class="primary">Browse…</button>
+            </div>
+
+            <div id="preview-wrap" class="hidden">
+                <div id="preview-frame">
+                    <div id="preview"></div>
+                    <figure id="source-corner" title="Source image">
+                        <img id="source-thumb" alt="Source"/>
+                        <figcaption id="source-meta"></figcaption>
+                    </figure>
+                </div>
+                <div id="statusbar">
+                    <div id="progress"><div id="progress-fill"></div></div>
+                    <div id="stats">
+                        <span id="stat-shapes">–</span>
+                        <span id="stat-score"></span>
+                        <span id="stat-rate"></span>
+                        <span id="stat-elapsed"></span>
+                    </div>
+                </div>
+                <div id="actionbar">
+                    <div id="transport">
+                        <button id="btn-start" class="primary">▶ Start</button>
+                        <button id="btn-pause" class="hidden">⏸ Pause</button>
+                        <button id="btn-resume" class="hidden primary">▶ Resume</button>
+                        <button id="btn-cancel" class="hidden">■ Stop</button>
+                    </div>
+                    <div id="exportbar">
+                        <label class="fmt"><input type="checkbox" data-fmt="png" checked><span>PNG</span></label>
+                        <label class="fmt"><input type="checkbox" data-fmt="jpg" checked><span>JPG</span></label>
+                        <label class="fmt"><input type="checkbox" data-fmt="svg" checked><span>SVG</span></label>
+                        <label class="fmt" title="Animated GIF of the shapes being added"><input type="checkbox" data-fmt="gif"><span>GIF</span></label>
+                        <button id="btn-export" disabled>Export…</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="toast" class="hidden"></div>
+        </section>
+
+        <aside id="sidebar">
+            <section class="group" id="preset-group">
+                <div class="preset-row">
+                    <select id="preset-select">
+                        <option value="">Presets…</option>
+                    </select>
+                    <button id="btn-preset-save" title="Save current settings as a preset">＋</button>
+                    <button id="btn-preset-delete" title="Delete selected user preset" disabled>−</button>
+                </div>
+                <div id="preset-save-row" class="hidden">
+                    <input id="preset-name" type="text" placeholder="Preset name" spellcheck="false"/>
+                    <button id="btn-preset-confirm" class="primary">Save</button>
+                </div>
+            </section>
+
+            <section class="group">
+                <h3>Shapes</h3>
+                <div id="mode-grid" role="radiogroup" aria-label="Shape mode">
+                    <button data-mode="6" title="Quadratic beziers — best likeness at high counts" aria-label="Beziers">
+                        <svg viewBox="0 0 24 24"><path d="M3 18 Q 8 4, 13 11 T 21 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                        <span>Bezier</span>
+                    </button>
+                    <button data-mode="1" title="Triangles" aria-label="Triangles">
+                        <svg viewBox="0 0 24 24"><path d="M12 4 L21 20 H3 Z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+                        <span>Triangle</span>
+                    </button>
+                    <button data-mode="8" title="Polygons" aria-label="Polygons">
+                        <svg viewBox="0 0 24 24"><path d="M12 3 L20 9 L17 20 H7 L4 9 Z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+                        <span>Polygon</span>
+                    </button>
+                    <button data-mode="2" title="Rectangles" aria-label="Rectangles">
+                        <svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+                        <span>Rect</span>
+                    </button>
+                    <button data-mode="5" title="Rotated rectangles" aria-label="Rotated rectangles">
+                        <svg viewBox="0 0 24 24"><rect x="5" y="7" width="14" height="10" fill="none" stroke="currentColor" stroke-width="1.6" transform="rotate(-20 12 12)"/></svg>
+                        <span>Rect ∠</span>
+                    </button>
+                    <button data-mode="3" title="Ellipses" aria-label="Ellipses">
+                        <svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="9" ry="6" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+                        <span>Ellipse</span>
+                    </button>
+                    <button data-mode="7" title="Rotated ellipses" aria-label="Rotated ellipses">
+                        <svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="9" ry="5" fill="none" stroke="currentColor" stroke-width="1.6" transform="rotate(-25 12 12)"/></svg>
+                        <span>Ellipse ∠</span>
+                    </button>
+                    <button data-mode="4" title="Circles" aria-label="Circles">
+                        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+                        <span>Circle</span>
+                    </button>
+                    <button data-mode="0" title="Combo — a mix of all shapes" aria-label="Combo">
+                        <svg viewBox="0 0 24 24"><path d="M5 10 L9 3 L13 10 Z" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="17" cy="8" r="3.5" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="6" y="14" width="7" height="7" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
+                        <span>Combo</span>
+                    </button>
+                </div>
+
+                <label class="field">
+                    <span class="label-row"><span>Shapes</span><input id="count-num" type="number" min="1" max="500000" step="100" value="2000"/></span>
+                    <input id="count-slider" type="range" min="0" max="1000" value="500"/>
+                </label>
+
+                <label class="field">
+                    <span class="label-row">
+                        <span>Opacity</span>
+                        <span class="inline-check"><input id="alpha-auto" type="checkbox"/><em>auto</em></span>
+                        <input id="alpha-num" type="number" min="1" max="255" value="255"/>
+                    </span>
+                    <input id="alpha-slider" type="range" min="1" max="255" value="255"/>
+                </label>
+
+                <label class="field compact">
+                    <span class="label-row"><span title="Extra shapes per iteration with reduced search">Repeat</span><input id="repeat-num" type="number" min="0" max="16" value="0"/></span>
+                </label>
+            </section>
+
+            <section class="group">
+                <h3>Size</h3>
+                <label class="field compact">
+                    <span class="label-row">
+                        <span>Input</span>
+                        <span class="inline-check"><input id="inres-full" type="checkbox" checked/><em>full res</em></span>
+                        <input id="inres-num" type="number" min="64" max="4096" step="64" value="256" disabled/>
+                    </span>
+                </label>
+                <label class="field compact">
+                    <span class="label-row">
+                        <span>Output</span>
+                        <span class="inline-check"><input id="outsize-match" type="checkbox"/><em>match input</em></span>
+                        <input id="outsize-num" type="number" min="256" max="16384" step="256" value="1024"/>
+                    </span>
+                </label>
+            </section>
+
+            <section class="group">
+                <h3>Color</h3>
+                <label class="field compact">
+                    <span class="label-row">
+                        <span>Background</span>
+                        <span class="inline-check"><input id="bg-auto" type="checkbox" checked/><em>average</em></span>
+                        <input id="bg-color" type="color" value="#000000" disabled/>
+                    </span>
+                </label>
+            </section>
+
+            <section class="group">
+                <h3>Advanced</h3>
+                <label class="field compact">
+                    <span class="label-row">
+                        <span>Workers</span>
+                        <span class="inline-check"><input id="workers-all" type="checkbox" checked/><em>all cores</em></span>
+                        <input id="workers-num" type="number" min="1" max="64" value="8" disabled/>
+                    </span>
+                </label>
+
+                <label class="field compact">
+                    <span class="label-row">
+                        <span>Checkpoints</span>
+                        <span class="inline-check"><input id="cp-enable" type="checkbox"/><em>save every</em></span>
+                        <input id="cp-nth" type="number" min="1" max="10000" value="100" disabled/>
+                    </span>
+                </label>
+                <div id="cp-options" class="subfield hidden">
+                    <div class="cp-formats">
+                        <label class="fmt"><input id="cp-png" type="checkbox" checked><span>PNG</span></label>
+                        <label class="fmt"><input id="cp-jpg" type="checkbox"><span>JPG</span></label>
+                        <label class="fmt"><input id="cp-svg" type="checkbox"><span>SVG</span></label>
+                    </div>
+                    <button id="btn-cp-dir">Choose folder…</button>
+                    <div id="cp-dir-label" class="dim"></div>
+                </div>
+
+                <details id="stages-details">
+                    <summary>Stages</summary>
+                    <p class="dim">One stage per line: <code>count, mode, alpha, repeat</code>. Overrides the settings above.</p>
+                    <textarea id="stages-text" rows="3" spellcheck="false" placeholder="e.g.&#10;30, 8, 128, 0&#10;170, 6, 255, 0"></textarea>
+                </details>
+            </section>
+        </aside>
+    </main>
+</div>
+<script src="./src/main.ts" type="module"></script>
+</body>
+</html>
