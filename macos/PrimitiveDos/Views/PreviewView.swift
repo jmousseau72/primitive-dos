@@ -99,9 +99,8 @@ private struct DropZone: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            Image(systemName: "photo.badge.plus")
-                .font(.system(size: 56, weight: .light))
-                .foregroundStyle(.secondary)
+            DropIcon()
+                .frame(width: 64, height: 64)
             Text("Drop an image here")
                 .font(.title3.weight(.semibold))
             Text("PNG, JPEG, GIF, BMP, TIFF or WebP")
@@ -119,6 +118,37 @@ private struct DropZone: View {
                 .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [7, 5]))
                 .foregroundStyle(.quaternary)
                 .padding(40)
+        }
+    }
+}
+
+/// The shapes mark from the Wails app's drop zone (frontend/index.html):
+/// a stroked triangle, a soft filled circle, and a faint rounded square,
+/// drawn in the same 24×24 design space.
+private struct DropIcon: View {
+    var body: some View {
+        Canvas { context, size in
+            let s = size.width / 24
+
+            var triangle = Path()
+            triangle.move(to: CGPoint(x: 12 * s, y: 3 * s))
+            triangle.addLine(to: CGPoint(x: 20 * s, y: 17 * s))
+            triangle.addLine(to: CGPoint(x: 4 * s, y: 17 * s))
+            triangle.closeSubpath()
+            context.stroke(
+                triangle,
+                with: .color(.secondary.opacity(0.9)),
+                style: StrokeStyle(lineWidth: 1.2 * s, lineJoin: .round)
+            )
+
+            let circle = Path(ellipseIn: CGRect(x: 13 * s, y: 4 * s, width: 8 * s, height: 8 * s))
+            context.fill(circle, with: .color(.secondary.opacity(0.35)))
+
+            let square = Path(
+                roundedRect: CGRect(x: 4 * s, y: 13 * s, width: 7 * s, height: 7 * s),
+                cornerRadius: 1 * s
+            )
+            context.fill(square, with: .color(.secondary.opacity(0.2)))
         }
     }
 }
