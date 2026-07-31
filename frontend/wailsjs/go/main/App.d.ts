@@ -27,4 +27,6 @@ export function SelectInputFile():Promise<string>;
 
 export function SelectOutputDir(arg1:string):Promise<string>;
 
+export function SetDrawFocus(arg1:number,arg2:number,arg3:number,arg4:boolean):Promise<void>;
+
 export function StartRender(arg1:session.Params):Promise<string>;

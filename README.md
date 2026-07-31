@@ -28,6 +28,12 @@ quality loss.
   repeat, input resize (incl. full resolution), output size (incl. match
   input), background color (incl. auto average), worker count, multi-stage
   configs
+- **Run modes**: to a shape count, until stopped, until a similarity target,
+  or **drawing mode** — paint on the canvas and shapes appear under your brush
+- **Bezier stroke width** control (fixed or optimizer-varied), which the
+  upstream engine had frozen at 0.5
+- **Source underlay toggle** — see the original faintly beneath the shapes,
+  or keep the canvas pure
 - **Pause / resume / stop**, and **export at any moment** — mid-run, paused,
   or stopped
 - **Presets**: built-ins for fast experiments and high-quality finals, plus
@@ -66,6 +72,7 @@ go build -o primitive ./cmd/primitive-cli
 | `n` | n/a | number of shapes (repeatable for multi-stage runs) |
 | `m` | 1 | mode: 0=combo 1=triangle 2=rect 3=ellipse 4=circle 5=rotatedrect 6=beziers 7=rotatedellipse 8=polygon |
 | `rep` | 0 | extra shapes per iteration with reduced search |
+| `w` | 0.5 | bezier stroke width (0 = let the optimizer vary it) — new in Primitive Dos |
 | `nth` | 1 | save every Nth frame (with `%d` in output path) |
 | `r` | 256 | resize large input images to this size (0 = full resolution) |
 | `s` | 1024 | output image size |

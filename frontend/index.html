@@ -26,7 +26,11 @@
 
             <div id="preview-wrap" class="hidden">
                 <div id="preview-frame">
+                    <img id="underlay" class="hidden" alt=""/>
                     <div id="preview"></div>
+                    <button id="btn-underlay" title="Toggle the source-image underlay">
+                        <svg viewBox="0 0 24 24"><path d="M2 12 C 5 6, 19 6, 22 12 C 19 18, 5 18, 2 12 Z" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
+                    </button>
                     <figure id="source-corner" title="Source image">
                         <img id="source-thumb" alt="Source"/>
                         <figcaption id="source-meta"></figcaption>
@@ -74,6 +78,14 @@
                     <input id="preset-name" type="text" placeholder="Preset name" spellcheck="false"/>
                     <button id="btn-preset-confirm" class="primary">Save</button>
                 </div>
+            </section>
+
+            <section class="group">
+                <h3>Run</h3>
+                <label class="radio"><input type="radio" name="runmode" value="count" checked/><span>Until shape count</span></label>
+                <label class="radio"><input type="radio" name="runmode" value="forever"/><span>Until stopped</span></label>
+                <label class="radio"><input type="radio" name="runmode" value="score"/><span>Until <input id="target-score" type="number" min="50" max="99.9" step="0.5" value="95" disabled/> % similar</span></label>
+                <label class="radio" title="Shapes appear where you paint on the canvas"><input type="radio" name="runmode" value="draw"/><span>Drawing mode — paint on the canvas</span></label>
             </section>
 
             <section class="group">
@@ -129,6 +141,15 @@
                         <input id="alpha-num" type="number" min="1" max="255" value="255"/>
                     </span>
                     <input id="alpha-slider" type="range" min="1" max="255" value="255"/>
+                </label>
+
+                <label class="field" title="Stroke width for bezier lines">
+                    <span class="label-row">
+                        <span>Stroke width</span>
+                        <span class="inline-check"><input id="sw-auto" type="checkbox"/><em>auto</em></span>
+                        <input id="sw-num" type="number" min="0.1" max="64" step="0.1" value="0.5"/>
+                    </span>
+                    <input id="sw-slider" type="range" min="0.25" max="8" step="0.25" value="0.5"/>
                 </label>
 
                 <label class="field compact">

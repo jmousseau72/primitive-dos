@@ -50,6 +50,10 @@ export function SelectOutputDir(arg1) {
   return window['go']['main']['App']['SelectOutputDir'](arg1);
 }
 
+export function SetDrawFocus(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SetDrawFocus'](arg1, arg2, arg3, arg4);
+}
+
 export function StartRender(arg1) {
   return window['go']['main']['App']['StartRender'](arg1);
 }

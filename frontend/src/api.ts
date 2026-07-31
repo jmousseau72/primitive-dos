@@ -37,3 +37,10 @@ export const savePreset = (p: Preset): Promise<void> => App.SavePreset(p as any)
 export const deletePreset = (name: string): Promise<void> => App.DeletePreset(name);
 
 export const revealInFinder = (path: string): Promise<void> => App.RevealInFinder(path);
+
+export const setDrawFocus = (
+    x: number,
+    y: number,
+    radius: number,
+    active: boolean,
+): Promise<void> => App.SetDrawFocus(x, y, radius, active);

@@ -14,6 +14,8 @@ export interface AutoSaveOptions {
     nth: number;
 }
 
+export type RunMode = "count" | "forever" | "score" | "draw";
+
 export interface Params {
     inputPath: string;
     mode: number;
@@ -24,6 +26,9 @@ export interface Params {
     outputSize: number;
     background: string;
     workers: number;
+    strokeWidth: number;
+    runMode: RunMode;
+    targetScore: number;
     autoSave?: AutoSaveOptions;
     stages?: Stage[];
 }

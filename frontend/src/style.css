@@ -80,11 +80,19 @@ html, body {
     min-width: 0;
     padding: 0 16px 16px 16px;
     position: relative;
+    /* keep clear of the fixed sidebar */
+    margin-right: 300px;
 }
 
+/* Fixed-anchored to the window edge so stage reflow can never jiggle it. */
 #sidebar {
-    flex: 0 0 300px;
+    position: fixed;
+    top: var(--titlebar-h);
+    right: 0;
+    bottom: 0;
+    width: 300px;
     overflow-y: auto;
+    scrollbar-gutter: stable;
     padding: 0 14px 20px 14px;
     border-left: 1px solid var(--border);
     background: var(--panel);
@@ -138,8 +146,39 @@ html, body {
     justify-content: center;
 }
 
-#preview { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+#preview { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; position: relative; z-index: 1; }
 #preview svg, #preview img { width: 100%; height: 100%; object-fit: contain; display: block; }
+
+#preview.brush { cursor: crosshair; }
+
+/* Faint source image beneath the shapes (toggle; also the drawing guide). */
+#underlay {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    opacity: 0.3;
+    filter: grayscale(0.5);
+    z-index: 0;
+    pointer-events: none;
+}
+
+#btn-underlay {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 2;
+    width: 32px;
+    height: 26px;
+    padding: 3px 0 1px 0;
+    color: var(--text-dim);
+    background: var(--panel-2);
+    opacity: 0.85;
+}
+
+#btn-underlay svg { width: 17px; height: 17px; }
+#btn-underlay.active { color: var(--accent); border-color: var(--accent); }
 
 #source-corner {
     position: absolute;
@@ -185,6 +224,18 @@ html, body {
     border-radius: 2px;
     background: var(--accent);
     transition: width 0.15s linear;
+}
+
+/* Open-ended runs have no target count: show a drifting bar instead. */
+#progress.indeterminate #progress-fill {
+    width: 30% !important;
+    animation: indeterminate 1.4s ease-in-out infinite;
+}
+
+@keyframes indeterminate {
+    0% { margin-left: 0; }
+    50% { margin-left: 70%; }
+    100% { margin-left: 0; }
 }
 
 #stats {
@@ -362,6 +413,18 @@ textarea { width: 100%; resize: vertical; font-family: ui-monospace, "SF Mono", 
 }
 
 .inline-check em { font-style: normal; font-size: 11px; }
+
+label.radio {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 7px;
+    cursor: pointer;
+}
+
+label.radio input[type="radio"] { accent-color: var(--accent); margin: 0; }
+label.radio span { display: inline-flex; align-items: center; gap: 5px; }
+label.radio input[type="number"] { width: 56px; padding: 2px 6px; }
 
 .subfield { margin: 0 0 10px 0; padding: 8px; border: 1px solid var(--border); border-radius: 8px; }
 .cp-formats { display: flex; gap: 12px; margin-bottom: 8px; }

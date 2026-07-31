@@ -12,6 +12,7 @@ import (
 	"github.com/nfnt/resize"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
+	"github.com/jmousseau72/primitive-dos/internal/primitive"
 	"github.com/jmousseau72/primitive-dos/internal/session"
 )
 
@@ -176,4 +177,14 @@ func (a *App) DeletePreset(name string) error {
 // RevealInFinder shows an exported file in Finder.
 func (a *App) RevealInFinder(path string) error {
 	return exec.Command("open", "-R", path).Run()
+}
+
+// SetDrawFocus moves (or lifts) the drawing-mode brush. Coordinates are in
+// input-image space; the frontend maps pointer positions before calling.
+func (a *App) SetDrawFocus(x, y, radius float64, active bool) {
+	if active {
+		primitive.SetFocus(x, y, radius)
+	} else {
+		primitive.ClearFocus()
+	}
 }

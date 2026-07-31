@@ -1,6 +1,6 @@
 // Right-panel controls: reads/writes a Params object, mirrors the CLI flags.
 
-import type { Params, Preset, Stage } from "./types";
+import type { Params, Preset, RunMode, Stage } from "./types";
 
 const $ = <T extends HTMLElement>(id: string): T =>
     document.getElementById(id) as T;
@@ -28,6 +28,10 @@ const cpJpg = $<HTMLInputElement>("cp-jpg");
 const cpSvg = $<HTMLInputElement>("cp-svg");
 const cpDirLabel = $("cp-dir-label");
 const stagesText = $<HTMLTextAreaElement>("stages-text");
+const swAuto = $<HTMLInputElement>("sw-auto");
+const swNum = $<HTMLInputElement>("sw-num");
+const swSlider = $<HTMLInputElement>("sw-slider");
+const targetScore = $<HTMLInputElement>("target-score");
 
 let mode = 6;
 let checkpointDir = "";
@@ -100,6 +104,18 @@ export function initControls() {
     alphaSlider.addEventListener("input", () => (alphaNum.value = alphaSlider.value));
     alphaNum.addEventListener("change", () => (alphaSlider.value = alphaNum.value));
 
+    swAuto.addEventListener("change", () => {
+        swNum.disabled = swSlider.disabled = swAuto.checked;
+    });
+    swSlider.addEventListener("input", () => (swNum.value = swSlider.value));
+    swNum.addEventListener("change", () => (swSlider.value = swNum.value));
+
+    for (const radio of runModeRadios()) {
+        radio.addEventListener("change", () => {
+            targetScore.disabled = runMode() !== "score";
+        });
+    }
+
     inresFull.addEventListener("change", () => (inresNum.disabled = inresFull.checked));
     outsizeMatch.addEventListener("change", () => (outsizeNum.disabled = outsizeMatch.checked));
     bgAuto.addEventListener("change", () => (bgColor.disabled = bgAuto.checked));
@@ -109,6 +125,24 @@ export function initControls() {
         cpNth.disabled = !cpEnable.checked;
         cpOptions.classList.toggle("hidden", !cpEnable.checked);
     });
+}
+
+function runModeRadios(): HTMLInputElement[] {
+    return Array.from(
+        document.querySelectorAll<HTMLInputElement>('input[name="runmode"]'),
+    );
+}
+
+export function runMode(): RunMode {
+    const checked = runModeRadios().find((r) => r.checked);
+    return (checked?.value as RunMode) ?? "count";
+}
+
+function setRunMode(m: RunMode) {
+    for (const radio of runModeRadios()) {
+        radio.checked = radio.value === m;
+    }
+    targetScore.disabled = m !== "score";
 }
 
 export function setCheckpointDir(dir: string) {
@@ -136,6 +170,9 @@ export function gatherParams(inputPath: string): Params {
         outputSize: outsizeMatch.checked ? 0 : num(outsizeNum, 1024),
         background: bgAuto.checked ? "" : bgColor.value,
         workers: workersAll.checked ? 0 : num(workersNum, 1),
+        strokeWidth: swAuto.checked ? 0 : Math.max(0.1, Number(swNum.value) || 0.5),
+        runMode: runMode(),
+        targetScore: Math.min(99.9, Math.max(1, Number(targetScore.value) || 95)),
     };
     if (stages.length > 0) {
         p.stages = stages;
@@ -180,6 +217,14 @@ export function applyPreset(preset: Preset) {
     workersAll.checked = !p.workers;
     workersNum.disabled = workersAll.checked;
     if (p.workers > 0) workersNum.value = String(p.workers);
+    swAuto.checked = !p.strokeWidth;
+    swNum.disabled = swSlider.disabled = swAuto.checked;
+    if (p.strokeWidth > 0) {
+        swNum.value = String(p.strokeWidth);
+        swSlider.value = String(Math.min(8, p.strokeWidth));
+    }
+    setRunMode(p.runMode || "count");
+    if (p.targetScore > 0) targetScore.value = String(p.targetScore);
 }
 
 // Disable every control while a render runs (transport buttons stay live).
@@ -198,5 +243,7 @@ export function setControlsEnabled(enabled: boolean) {
         bgColor.disabled = bgAuto.checked;
         workersNum.disabled = workersAll.checked;
         cpNth.disabled = !cpEnable.checked;
+        swNum.disabled = swSlider.disabled = swAuto.checked;
+        targetScore.disabled = runMode() !== "score";
     }
 }

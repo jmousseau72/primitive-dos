@@ -23,18 +23,19 @@ import (
 )
 
 var (
-	Input      string
-	Outputs    flagArray
-	Background string
-	Configs    shapeConfigArray
-	Alpha      int
-	InputSize  int
-	OutputSize int
-	Mode       int
-	Workers    int
-	Nth        int
-	Repeat     int
-	V, VV      bool
+	Input       string
+	Outputs     flagArray
+	Background  string
+	Configs     shapeConfigArray
+	Alpha       int
+	InputSize   int
+	OutputSize  int
+	Mode        int
+	Workers     int
+	Nth         int
+	Repeat      int
+	StrokeWidth float64
+	V, VV       bool
 )
 
 type flagArray []string
@@ -79,6 +80,7 @@ func init() {
 	flag.IntVar(&Workers, "j", 0, "number of parallel workers (default uses all cores)")
 	flag.IntVar(&Nth, "nth", 1, "save every Nth frame (put \"%d\" in path)")
 	flag.IntVar(&Repeat, "rep", 0, "add N extra shapes per iteration with reduced search")
+	flag.Float64Var(&StrokeWidth, "w", 0.5, "bezier stroke width (0 = let the optimizer vary it)")
 	flag.BoolVar(&V, "v", false, "verbose")
 	flag.BoolVar(&VV, "vv", false, "very verbose")
 }
@@ -134,6 +136,15 @@ func main() {
 	// determine worker count
 	if Workers < 1 {
 		Workers = runtime.NumCPU()
+	}
+
+	// configure bezier stroke width (new in Primitive Dos)
+	if StrokeWidth > 0 {
+		primitive.QuadraticWidth = StrokeWidth
+		primitive.QuadraticWidthMutate = false
+	} else {
+		primitive.QuadraticWidth = 1
+		primitive.QuadraticWidthMutate = true
 	}
 
 	// read input image

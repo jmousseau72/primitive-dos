@@ -126,6 +126,9 @@ export namespace session {
 	    outputSize: number;
 	    background: string;
 	    workers: number;
+	    strokeWidth: number;
+	    runMode: string;
+	    targetScore: number;
 	    autoSave?: AutoSaveOptions;
 	    stages?: Stage[];
 	
@@ -144,6 +147,9 @@ export namespace session {
 	        this.outputSize = source["outputSize"];
 	        this.background = source["background"];
 	        this.workers = source["workers"];
+	        this.strokeWidth = source["strokeWidth"];
+	        this.runMode = source["runMode"];
+	        this.targetScore = source["targetScore"];
 	        this.autoSave = this.convertValues(source["autoSave"], AutoSaveOptions);
 	        this.stages = this.convertValues(source["stages"], Stage);
 	    }

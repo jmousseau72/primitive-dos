@@ -30,10 +30,20 @@ const (
 	batchMaxFragments  = 200
 )
 
+// Run modes. Count reproduces the CLI behavior; the other three come from
+// the legacy macOS app: open-ended runs, a similarity target, and painting
+// shapes under the cursor.
+const (
+	RunCount   = "count"
+	RunForever = "forever"
+	RunScore   = "score"
+	RunDraw    = "draw"
+)
+
 // Params mirrors the CLI flags. Zero values mean "auto" everywhere the CLI
 // uses a sentinel: Alpha 0 = per-shape auto, InputResize 0 = full resolution,
 // OutputSize 0 = match input's largest dimension, Background "" = average
-// color, Workers 0 = all cores.
+// color, Workers 0 = all cores, StrokeWidth 0 = optimizer-varied.
 type Params struct {
 	InputPath   string           `json:"inputPath"`
 	Mode        int              `json:"mode"`
@@ -44,6 +54,9 @@ type Params struct {
 	OutputSize  int              `json:"outputSize"`
 	Background  string           `json:"background"`
 	Workers     int              `json:"workers"`
+	StrokeWidth float64          `json:"strokeWidth"` // bezier stroke width; 0 = auto
+	RunMode     string           `json:"runMode"`     // "" or RunCount/RunForever/RunScore/RunDraw
+	TargetScore float64          `json:"targetScore"` // similarity %, for RunScore
 	AutoSave    *AutoSaveOptions `json:"autoSave,omitempty"`
 	// Stages, when non-empty, overrides Mode/ShapeCount/Alpha/Repeat and
 	// reproduces the CLI's repeatable -n flag.
@@ -73,7 +86,20 @@ func (p *Params) stages() []Stage {
 	return []Stage{{Count: p.ShapeCount, Mode: p.Mode, Alpha: p.Alpha, Repeat: p.Repeat}}
 }
 
+// unbounded reports whether the run has no predetermined shape count.
+func (p *Params) unbounded() bool {
+	switch p.RunMode {
+	case RunForever, RunScore, RunDraw:
+		return true
+	}
+	return false
+}
+
+// totalSteps returns the target step count, or 0 for unbounded runs.
 func (p *Params) totalSteps() int {
+	if p.unbounded() {
+		return 0
+	}
 	total := 0
 	for _, s := range p.stages() {
 		total += s.Count
@@ -81,9 +107,30 @@ func (p *Params) totalSteps() int {
 	return total
 }
 
+// similarityPct converts the model's RMSE score into the friendly percentage
+// the legacy app displayed.
+func similarityPct(score float64) float64 {
+	p := (1 - score) * 100
+	if p < 0 {
+		return 0
+	}
+	return p
+}
+
 func (p *Params) Validate() error {
 	if p.InputPath == "" {
 		return fmt.Errorf("no input image selected")
+	}
+	switch p.RunMode {
+	case "", RunCount, RunForever, RunScore, RunDraw:
+	default:
+		return fmt.Errorf("unknown run mode %q", p.RunMode)
+	}
+	if p.RunMode == RunScore && (p.TargetScore <= 0 || p.TargetScore >= 100) {
+		return fmt.Errorf("target similarity must be between 0 and 100%%")
+	}
+	if p.StrokeWidth < 0 || p.StrokeWidth > 64 {
+		return fmt.Errorf("stroke width must be between 0 (auto) and 64")
 	}
 	for _, s := range p.stages() {
 		if s.Count < 1 {
@@ -215,6 +262,18 @@ func (s *RenderSession) run() {
 	}
 	bg := ResolveBackground(input, p.Background)
 
+	// Engine configuration for this run. Safe here: workers don't exist yet,
+	// and only one session runs at a time.
+	if p.StrokeWidth > 0 {
+		primitive.QuadraticWidth = p.StrokeWidth
+		primitive.QuadraticWidthMutate = false
+	} else {
+		primitive.QuadraticWidth = 1
+		primitive.QuadraticWidthMutate = true
+	}
+	primitive.ClearFocus()
+	defer primitive.ClearFocus()
+
 	s.mu.Lock()
 	s.model = primitive.NewModel(input, bg, outputSize, workers)
 	model := s.model
@@ -262,47 +321,88 @@ func (s *RenderSession) run() {
 		s.emit(EvtBatch, batch)
 	}
 
-	for _, stage := range p.stages() {
-		for i := 0; i < stage.Count; i++ {
+	// stepOnce runs one engine step and all bookkeeping; true = cancelled.
+	stepOnce := func(stage Stage) bool {
+		if s.waitIfPaused() {
+			return true
+		}
+
+		stepStart := time.Now()
+		s.mu.Lock()
+		model.Step(primitive.ShapeType(stage.Mode), stage.Alpha, stage.Repeat)
+		added := s.collectNewShapes()
+		s.mu.Unlock()
+		s.stepsDone++
+
+		stepDur := time.Since(stepStart).Seconds()
+		if stepDur > 0 {
+			instant := float64(len(added)) / stepDur
+			if rate == 0 {
+				rate = instant
+			} else {
+				rate = rate*0.9 + instant*0.1
+			}
+		}
+
+		if !s.previewRaster {
+			fragments = append(fragments, added...)
+			if s.lastShapeIdx > svgPreviewShapeLimit {
+				s.previewRaster = true
+			}
+		}
+
+		if len(fragments) >= batchMaxFragments || time.Since(lastFlush) >= batchFlushInterval {
+			flush()
+		}
+
+		s.maybeAutoSave()
+		return false
+	}
+
+	// waitForBrush idles (drawing mode) until the user paints; false = cancelled.
+	waitForBrush := func() bool {
+		for !primitive.FocusActive() {
 			if s.waitIfPaused() {
-				flush()
-				s.finish(start, true)
-				return
+				return false
 			}
+			select {
+			case <-s.ctx.Done():
+				return false
+			case <-time.After(50 * time.Millisecond):
+			}
+		}
+		return true
+	}
 
-			stepStart := time.Now()
-			s.mu.Lock()
-			model.Step(primitive.ShapeType(stage.Mode), stage.Alpha, stage.Repeat)
-			added := s.collectNewShapes()
-			s.mu.Unlock()
-			s.stepsDone++
-
-			stepDur := time.Since(stepStart).Seconds()
-			if stepDur > 0 {
-				instant := float64(len(added)) / stepDur
-				if rate == 0 {
-					rate = instant
-				} else {
-					rate = rate*0.9 + instant*0.1
+	cancelled := false
+	if p.unbounded() {
+		stage := p.stages()[0]
+		for {
+			if p.RunMode == RunScore && similarityPct(model.Score) >= p.TargetScore {
+				break
+			}
+			if p.RunMode == RunDraw && !waitForBrush() {
+				cancelled = true
+				break
+			}
+			if stepOnce(stage) {
+				cancelled = true
+				break
+			}
+		}
+	} else {
+	outer:
+		for _, stage := range p.stages() {
+			for i := 0; i < stage.Count; i++ {
+				if stepOnce(stage) {
+					cancelled = true
+					break outer
 				}
 			}
-
-			if !s.previewRaster {
-				fragments = append(fragments, added...)
-				if s.lastShapeIdx > svgPreviewShapeLimit {
-					s.previewRaster = true
-				}
-			}
-
-			if len(fragments) >= batchMaxFragments || time.Since(lastFlush) >= batchFlushInterval {
-				flush()
-			}
-
-			s.maybeAutoSave()
 		}
 	}
 	flush()
-	s.finish(start, false)
+	s.finish(start, cancelled)
 }
 
 func (s *RenderSession) finish(start time.Time, cancelled bool) {

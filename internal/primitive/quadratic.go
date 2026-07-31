@@ -18,13 +18,12 @@ type Quadratic struct {
 
 func NewRandomQuadratic(worker *Worker) *Quadratic {
 	rnd := worker.Rnd
-	x1 := rnd.Float64() * float64(worker.W)
-	y1 := rnd.Float64() * float64(worker.H)
+	x1, y1 := seedPoint(rnd, worker.W, worker.H)
 	x2 := x1 + rnd.Float64()*40 - 20
 	y2 := y1 + rnd.Float64()*40 - 20
 	x3 := x2 + rnd.Float64()*40 - 20
 	y3 := y2 + rnd.Float64()*40 - 20
-	width := 1.0 / 2
+	width := QuadraticWidth
 	q := &Quadratic{worker, x1, y1, x2, y2, x3, y3, width}
 	q.Mutate()
 	return q
@@ -55,8 +54,14 @@ func (q *Quadratic) Mutate() {
 	w := q.Worker.W
 	h := q.Worker.H
 	rnd := q.Worker.Rnd
+	// Upstream always rolled Intn(3), leaving the width case unreachable;
+	// widths only vary when QuadraticWidthMutate is on.
+	cases := 3
+	if QuadraticWidthMutate {
+		cases = 4
+	}
 	for {
-		switch rnd.Intn(3) {
+		switch rnd.Intn(cases) {
 		case 0:
 			q.X1 = clamp(q.X1+rnd.NormFloat64()*16, -m, float64(w-1+m))
 			q.Y1 = clamp(q.Y1+rnd.NormFloat64()*16, -m, float64(h-1+m))
@@ -67,7 +72,7 @@ func (q *Quadratic) Mutate() {
 			q.X3 = clamp(q.X3+rnd.NormFloat64()*16, -m, float64(w-1+m))
 			q.Y3 = clamp(q.Y3+rnd.NormFloat64()*16, -m, float64(h-1+m))
 		case 3:
-			q.Width = clamp(q.Width+rnd.NormFloat64(), 1, 16)
+			q.Width = clamp(q.Width+rnd.NormFloat64(), 0.5, 16)
 		}
 		if q.Valid() {
 			break

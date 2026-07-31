@@ -23,10 +23,12 @@ func BuiltInPresets() []Preset {
 			Name:    name,
 			BuiltIn: true,
 			Params: Params{
-				Mode:       6,
-				ShapeCount: count,
-				Alpha:      255,
-				OutputSize: outputSize,
+				Mode:        6,
+				ShapeCount:  count,
+				Alpha:       255,
+				OutputSize:  outputSize,
+				StrokeWidth: 0.5,
+				RunMode:     RunCount,
 			},
 			ExportFormats: []string{"png", "jpg", "svg"},
 		}

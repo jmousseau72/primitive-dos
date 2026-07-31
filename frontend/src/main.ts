@@ -10,6 +10,7 @@ import {
     revealInFinder,
     selectInputFile,
     selectOutputDir,
+    setDrawFocus,
     startRender,
 } from "./api";
 import {
@@ -17,11 +18,24 @@ import {
     gatherParams,
     getCheckpointDir,
     initControls,
+    runMode,
     setCheckpointDir,
     setControlsEnabled,
 } from "./controls";
 import { initPresets } from "./presets";
-import { applyBatch, beginPreview, updateStats } from "./preview";
+import {
+    applyBatch,
+    beginPreview,
+    initBrush,
+    resetPreview,
+    resetUnderlayButton,
+    setBrushCursor,
+    setUnderlaySource,
+    setUnderlayVisible,
+    underlayAvailable,
+    underlayVisible,
+    updateStats,
+} from "./preview";
 import type {
     BatchPayload,
     DonePayload,
@@ -45,6 +59,7 @@ const btnResume = $<HTMLButtonElement>("btn-resume");
 const btnCancel = $<HTMLButtonElement>("btn-cancel");
 const btnExport = $<HTMLButtonElement>("btn-export");
 const btnCpDir = $<HTMLButtonElement>("btn-cp-dir");
+const btnUnderlay = $<HTMLButtonElement>("btn-underlay");
 const toast = $("toast");
 
 let state: UIState = "empty";
@@ -103,27 +118,21 @@ async function loadImage(path: string) {
     try {
         const info = await inspectInput(path);
         inputPath = info.path;
-        sourceThumb.src = `data:image/jpeg;base64,${info.thumbJpegB64}`;
+        const dataUrl = `data:image/jpeg;base64,${info.thumbJpegB64}`;
+        sourceThumb.src = dataUrl;
         sourceMeta.textContent = `${info.width} × ${info.height}`;
         sessionStarted = false;
         sessionId = "";
         setState("loaded");
-        beginBlankPreview();
+        // Empty canvas with the source as a faint underlay until Start.
+        resetPreview();
+        resetUnderlayButton();
+        setUnderlaySource(dataUrl);
+        setUnderlayVisible(true);
+        updateStats(0, 0, 0, 0, 0);
     } catch (err) {
         showToast(String(err), true);
     }
-}
-
-function beginBlankPreview() {
-    // Show the source image dimmed as a placeholder until a render starts.
-    const preview = $("preview");
-    preview.innerHTML = "";
-    const img = document.createElement("img");
-    img.src = sourceThumb.src;
-    img.style.opacity = "0.25";
-    img.style.filter = "grayscale(0.6)";
-    preview.appendChild(img);
-    updateStats(0, 0, 0, 0, 0);
 }
 
 async function browse() {
@@ -199,7 +208,12 @@ function wireEvents() {
     EventsOn("session:started", (p: StartedPayload) => {
         if (p.sessionId !== sessionId) return;
         sessionStarted = true;
+        resetUnderlayButton();
+        // Default per Jason: pure shapes on the canvas — no underlay — except
+        // in drawing mode, where the faint source is the painting guide.
+        setUnderlayVisible(runMode() === "draw");
         beginPreview(p);
+        setBrushCursor(runMode() === "draw");
         setState("running");
     });
 
@@ -213,6 +227,7 @@ function wireEvents() {
 
     EventsOn("session:done", (p: DonePayload) => {
         if (p.sessionId !== sessionId) return;
+        setBrushCursor(false);
         setState("done");
         showToast(
             p.cancelled
@@ -248,6 +263,15 @@ function wireDom() {
         const dir = await selectOutputDir(getCheckpointDir());
         if (dir) setCheckpointDir(dir);
     });
+
+    btnUnderlay.addEventListener("click", () => {
+        if (underlayAvailable()) setUnderlayVisible(!underlayVisible());
+    });
+
+    initBrush(
+        () => state === "running" && runMode() === "draw",
+        (x, y, radius, active) => void setDrawFocus(x, y, radius, active),
+    );
 
     // Visual affordance for HTML5 drag-over (native drop is handled by Wails).
     for (const evt of ["dragenter", "dragover"]) {
