@@ -55,17 +55,30 @@ struct ContentView: View {
                 .help("Toggle the source-image underlay")
 
                 Button {
-                    state.runExport()
+                    state.saveDocument()
                 } label: {
                     Label {
-                        Text("Export")
+                        Text("Save Document")
                     } icon: {
                         FloppyIcon()
                             .frame(width: 17, height: 17)
                     }
                 }
+                .disabled(!state.sessionStarted)
+                .help("Save the render as a .prim document (⌘S)")
+
+                Button {
+                    state.runExport()
+                } label: {
+                    Label {
+                        Text("Export")
+                    } icon: {
+                        ExportIcon()
+                            .frame(width: 17, height: 17)
+                    }
+                }
                 .disabled(!state.canExport)
-                .help("Export the current result (⌘E)")
+                .help("Export images (⌘E)")
             }
         }
         .navigationTitle("Primitive Dos")
@@ -151,6 +164,46 @@ struct FloppyIcon: View {
             // Label.
             let label = Path(CGRect(x: 7 * s, y: 13 * s, width: 10 * s, height: 8 * s))
             context.stroke(label, with: .color(.primary), style: StrokeStyle(lineWidth: 1.3 * s))
+        }
+    }
+}
+
+/// Export glyph: a panel with a right-pointing arrow, escaping a second
+/// panel behind it — matching the mark Jason picked. 24×24 design space.
+struct ExportIcon: View {
+    var body: some View {
+        Canvas { context, size in
+            let s = size.width / 24
+            let stroke = StrokeStyle(lineWidth: 1.6 * s, lineCap: .round, lineJoin: .round)
+
+            let front = Path(
+                roundedRect: CGRect(x: 3 * s, y: 8 * s, width: 12.5 * s, height: 13 * s),
+                cornerRadius: 2 * s
+            )
+            let back = Path(
+                roundedRect: CGRect(x: 8.5 * s, y: 3 * s, width: 12.5 * s, height: 13 * s),
+                cornerRadius: 2 * s
+            )
+
+            // Back panel, hidden where the front panel overlaps.
+            context.drawLayer { layer in
+                layer.clip(to: front.strokedPath(StrokeStyle(lineWidth: 3.2 * s)).union(front), options: .inverse)
+                layer.stroke(back, with: .color(.primary), style: stroke)
+                var dash = Path()
+                dash.move(to: CGPoint(x: 13 * s, y: 6 * s))
+                dash.addLine(to: CGPoint(x: 17 * s, y: 6 * s))
+                layer.stroke(dash, with: .color(.primary), style: StrokeStyle(lineWidth: 1.6 * s, lineCap: .round))
+            }
+
+            context.stroke(front, with: .color(.primary), style: stroke)
+
+            var arrow = Path()
+            arrow.move(to: CGPoint(x: 6 * s, y: 14.5 * s))
+            arrow.addLine(to: CGPoint(x: 12.2 * s, y: 14.5 * s))
+            arrow.move(to: CGPoint(x: 9.9 * s, y: 12.1 * s))
+            arrow.addLine(to: CGPoint(x: 12.4 * s, y: 14.5 * s))
+            arrow.addLine(to: CGPoint(x: 9.9 * s, y: 16.9 * s))
+            context.stroke(arrow, with: .color(.primary), style: stroke)
         }
     }
 }
