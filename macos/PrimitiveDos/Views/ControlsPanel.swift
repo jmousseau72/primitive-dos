@@ -58,7 +58,14 @@ struct ControlsPanel: View {
         let dimmed = locked && state.isBusy
         let effectiveExpansion = Binding<Bool>(
             get: { isExpanded.wrappedValue && !dimmed },
-            set: { isExpanded.wrappedValue = $0 }
+            set: { newValue in
+                // Finder-style power move: ⌥-click toggles every section.
+                if NSEvent.modifierFlags.contains(.option) {
+                    setAllSections(expanded: newValue)
+                } else {
+                    isExpanded.wrappedValue = newValue
+                }
+            }
         )
         return Section {
             DisclosureGroup(isExpanded: effectiveExpansion) {
@@ -69,7 +76,20 @@ struct ControlsPanel: View {
                 Text(title)
                     .font(.headline)
                     .foregroundStyle(dimmed ? .secondary : .primary)
+                    .help("Click to expand or collapse — ⌥-click for all sections")
             }
+        }
+    }
+
+    private func setAllSections(expanded: Bool) {
+        withAnimation(.easeInOut(duration: 0.25)) {
+            presetsExpanded = expanded
+            runExpanded = expanded
+            shapesExpanded = expanded
+            sizeExpanded = expanded
+            colorExpanded = expanded
+            advancedExpanded = expanded
+            exportExpanded = expanded
         }
     }
 
