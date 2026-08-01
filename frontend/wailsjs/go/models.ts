@@ -1,26 +1,3 @@
-export namespace main {
-	
-	export class InputInfo {
-	    path: string;
-	    width: number;
-	    height: number;
-	    thumbJpegB64: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new InputInfo(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.path = source["path"];
-	        this.width = source["width"];
-	        this.height = source["height"];
-	        this.thumbJpegB64 = source["thumbJpegB64"];
-	    }
-	}
-
-}
-
 export namespace session {
 	
 	export class AutoSaveOptions {
@@ -98,6 +75,24 @@ export namespace session {
 		}
 	}
 	
+	export class InputInfo {
+	    path: string;
+	    width: number;
+	    height: number;
+	    thumbJpegB64: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new InputInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.width = source["width"];
+	        this.height = source["height"];
+	        this.thumbJpegB64 = source["thumbJpegB64"];
+	    }
+	}
 	export class Stage {
 	    count: number;
 	    mode: number;
@@ -129,6 +124,7 @@ export namespace session {
 	    strokeWidth: number;
 	    runMode: string;
 	    targetScore: number;
+	    emitShapeData?: boolean;
 	    autoSave?: AutoSaveOptions;
 	    stages?: Stage[];
 	
@@ -150,6 +146,7 @@ export namespace session {
 	        this.strokeWidth = source["strokeWidth"];
 	        this.runMode = source["runMode"];
 	        this.targetScore = source["targetScore"];
+	        this.emitShapeData = source["emitShapeData"];
 	        this.autoSave = this.convertValues(source["autoSave"], AutoSaveOptions);
 	        this.stages = this.convertValues(source["stages"], Stage);
 	    }

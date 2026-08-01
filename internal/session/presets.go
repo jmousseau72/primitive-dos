@@ -33,6 +33,25 @@ func BuiltInPresets() []Preset {
 			ExportFormats: []string{"png", "jpg", "svg"},
 		}
 	}
+	// The classic abstract-art looks from the original project use a
+	// 256px working input and half alpha — that combination, not shape
+	// count alone, is what produces the iconic result.
+	classic := func(name string, mode, count int) Preset {
+		return Preset{
+			Name:    name,
+			BuiltIn: true,
+			Params: Params{
+				Mode:        mode,
+				ShapeCount:  count,
+				Alpha:       128,
+				InputResize: 256,
+				OutputSize:  1024,
+				StrokeWidth: 0.5,
+				RunMode:     RunCount,
+			},
+			ExportFormats: []string{"png", "jpg", "svg"},
+		}
+	}
 	return []Preset{
 		quad("Fast Quad 20k", 20000, 1024),
 		quad("Fast Quad 50k", 50000, 1024),
@@ -42,6 +61,14 @@ func BuiltInPresets() []Preset {
 		quad("HQ Final 10k", 10000, 0),
 		quad("HQ Final 50k", 50000, 0),
 		quad("HQ Final 120k", 120000, 0),
+		classic("Classic Triangles 200", 1, 200),
+		classic("Triangles Fine 1k", 1, 1000),
+		classic("Mosaic Rectangles 300", 2, 300),
+		classic("Rotated Rects 350", 5, 350),
+		classic("Stained Glass 500", 8, 500),
+		classic("Ellipse Wash 250", 3, 250),
+		classic("Circles 400", 4, 400),
+		classic("Combo 600", 0, 600),
 	}
 }
 
