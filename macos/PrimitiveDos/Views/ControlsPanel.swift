@@ -121,6 +121,16 @@ struct ControlsPanel: View {
                 state.applyPreset(named: state.selectedPreset)
             }
         }
+        if state.isPresetEdited {
+            Label {
+                Text("Edited — differs from “\(state.selectedPreset)”. Save as a preset to keep it.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } icon: {
+                Image(systemName: "pencil.circle.fill")
+                    .foregroundStyle(.orange)
+            }
+        }
         HStack {
             Button("Save as Preset…") {
                 showSavePreset = true

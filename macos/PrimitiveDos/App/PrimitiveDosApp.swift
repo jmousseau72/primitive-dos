@@ -32,6 +32,15 @@ struct PrimitiveDosApp: App {
                 }
                 .keyboardShortcut(.delete, modifiers: .command)
                 .disabled(state.phase == .empty || state.isBusy)
+
+                Divider()
+
+                Button("Import Presets…") {
+                    state.importPresets()
+                }
+                Button("Export Presets…") {
+                    state.exportPresets()
+                }
             }
             CommandGroup(after: .saveItem) {
                 Button("Export…") {

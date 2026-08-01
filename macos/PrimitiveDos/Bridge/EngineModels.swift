@@ -17,7 +17,7 @@ enum RunMode: String, Codable, Sendable, CaseIterable, Identifiable {
     }
 }
 
-struct EngineParams: Codable, Sendable {
+struct EngineParams: Codable, Sendable, Equatable {
     var inputPath = ""
     var mode = 6
     var shapeCount = 2000
@@ -41,7 +41,7 @@ struct EngineParams: Codable, Sendable {
     }
 }
 
-struct Stage: Codable, Sendable, Identifiable {
+struct Stage: Codable, Sendable, Equatable, Identifiable {
     var count: Int
     var mode: Int
     var alpha: Int
@@ -55,7 +55,7 @@ struct Stage: Codable, Sendable, Identifiable {
     }
 }
 
-struct AutoSaveOptions: Codable, Sendable {
+struct AutoSaveOptions: Codable, Sendable, Equatable {
     var dir: String
     var baseName: String
     var formats: [String]

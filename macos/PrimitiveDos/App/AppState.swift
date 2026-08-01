@@ -6,6 +6,7 @@
 
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 @MainActor
 @Observable
@@ -64,6 +65,9 @@ final class AppState {
 
     private(set) var presets: [Preset] = []
     var selectedPreset = ""
+    // Snapshot taken right after applying a preset (round-tripped through
+    // buildParams so defaults normalize), used to flag divergence.
+    private var presetBaseline: (params: EngineParams, formats: Set<String>)?
 
     private let renderer = PreviewRenderer()
     private var pumpTask: Task<Void, Never>?
@@ -72,6 +76,14 @@ final class AppState {
 
     var similarity: Double { max(0, (1 - score) * 100) }
     var isBusy: Bool { phase == .running || phase == .paused }
+
+    /// True once any control differs from the selected preset.
+    var isPresetEdited: Bool {
+        guard !selectedPreset.isEmpty, let baseline = presetBaseline else { return false }
+        var current = buildParams(inputPath: "")
+        current.autoSave = nil
+        return current != baseline.params || exportFormats != baseline.formats
+    }
     var canStart: Bool { phase == .loaded || phase == .done }
     var canExport: Bool { sessionStarted && (isBusy || phase == .done) && !isExporting }
     var isDrawingRun: Bool { runMode == .draw && phase == .running }
@@ -262,6 +274,9 @@ final class AppState {
         runMode = p.runMode
         if p.targetScore > 0 { targetScore = p.targetScore }
         if !preset.exportFormats.isEmpty { exportFormats = Set(preset.exportFormats) }
+        var baseline = buildParams(inputPath: "")
+        baseline.autoSave = nil
+        presetBaseline = (baseline, exportFormats)
         toast = "Applied “\(name)”"
     }
 
@@ -273,9 +288,64 @@ final class AppState {
             try Engine.savePreset(preset)
             refreshPresets()
             selectedPreset = name
+            presetBaseline = (params, exportFormats)
             toast = "Saved “\(name)”"
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    // MARK: - Preset transfer
+
+    /// Writes the custom presets (built-ins exist everywhere) to a JSON file
+    /// that Import can merge on any machine.
+    func exportPresets() {
+        let customs = presets.filter { !$0.builtIn }
+        guard !customs.isEmpty else {
+            errorMessage = "No custom presets to export yet."
+            return
+        }
+        let panel = NSSavePanel()
+        panel.title = "Export Presets"
+        panel.nameFieldStringValue = "PrimitiveDos-Presets.json"
+        panel.allowedContentTypes = [.json]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try encoder.encode(customs).write(to: url)
+            toast = "Exported \(customs.count) preset\(customs.count == 1 ? "" : "s")"
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Merges presets from a JSON file: same-name customs are overwritten,
+    /// names colliding with built-ins are skipped.
+    func importPresets() {
+        let panel = NSOpenPanel()
+        panel.title = "Import Presets"
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [.json]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let incoming = try JSONDecoder().decode([Preset].self, from: Data(contentsOf: url))
+            var imported = 0
+            var skipped = 0
+            for preset in incoming where !preset.name.isEmpty {
+                do {
+                    try Engine.savePreset(preset)
+                    imported += 1
+                } catch {
+                    skipped += 1
+                }
+            }
+            refreshPresets()
+            toast = skipped == 0
+                ? "Imported \(imported) preset\(imported == 1 ? "" : "s")"
+                : "Imported \(imported), skipped \(skipped) (built-in names)"
+        } catch {
+            errorMessage = "Could not read presets file: \(error.localizedDescription)"
         }
     }
 
