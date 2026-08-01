@@ -26,6 +26,12 @@ struct PrimitiveDosApp: App {
                 }
                 .keyboardShortcut("o", modifiers: .command)
                 .disabled(state.isBusy)
+
+                Button("Clear Image") {
+                    state.clearImage()
+                }
+                .keyboardShortcut(.delete, modifiers: .command)
+                .disabled(state.phase == .empty || state.isBusy)
             }
             CommandGroup(after: .saveItem) {
                 Button("Export…") {

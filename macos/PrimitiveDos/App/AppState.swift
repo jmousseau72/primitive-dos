@@ -124,6 +124,26 @@ final class AppState {
         }
     }
 
+    /// Clears the loaded image and any finished render, returning to the
+    /// drop-zone state. Stop the render first if one is active.
+    func clearImage() {
+        guard !isBusy else {
+            errorMessage = "Stop the current render before clearing the image."
+            return
+        }
+        guard phase != .empty else { return }
+        inputInfo = nil
+        sourceImage = nil
+        sessionId = ""
+        sessionStarted = false
+        started = nil
+        previewImage = nil
+        underlayVisible = false
+        resetStats()
+        phase = .empty
+        Task { await renderer.reset() }
+    }
+
     func openImagePanel() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = false

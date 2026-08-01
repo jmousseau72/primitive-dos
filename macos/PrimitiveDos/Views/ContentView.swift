@@ -23,6 +23,12 @@ struct ContentView: View {
                 }
                 .disabled(state.isBusy)
                 .help("Open an image (⌘O)")
+
+                Button("Clear Image", systemImage: "arrow.3.trianglepath") {
+                    state.clearImage()
+                }
+                .disabled(state.phase == .empty || state.isBusy)
+                .help("Clear the image and start fresh (⌘⌫)")
             }
 
             ToolbarItemGroup {
