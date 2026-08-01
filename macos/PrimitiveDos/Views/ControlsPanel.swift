@@ -343,6 +343,11 @@ struct ControlsPanel: View {
                     .toggleStyle(.checkbox)
                     .font(.caption)
             }
+            // Forms forward row clicks to a lone toggle, silently flipping
+            // "Auto" when the user clicks anywhere on the row. Swallow row
+            // taps so only the checkbox itself toggles.
+            .contentShape(Rectangle())
+            .onTapGesture {}
             control()
                 .disabled(auto.wrappedValue)
         }

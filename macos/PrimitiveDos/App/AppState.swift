@@ -5,6 +5,7 @@
 // controls disable while running; loading a new image requires stopping.
 
 import AppKit
+import OSLog
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -41,9 +42,23 @@ final class AppState {
 
     var mode = 6
     var shapeCount = 2000
-    var alphaAuto = false
+    var alphaAuto = false {
+        didSet {
+            if alphaAuto != oldValue {
+                Logger(subsystem: "com.jmousseau.primitivedos", category: "controls")
+                    .debug("alphaAuto -> \(self.alphaAuto)")
+            }
+        }
+    }
     var alpha = 255.0
-    var strokeAuto = false
+    var strokeAuto = false {
+        didSet {
+            if strokeAuto != oldValue {
+                Logger(subsystem: "com.jmousseau.primitivedos", category: "controls")
+                    .debug("strokeAuto -> \(self.strokeAuto)")
+            }
+        }
+    }
     var strokeWidth = 0.5
     var repeatCount = 0
     var inputFullRes = true
