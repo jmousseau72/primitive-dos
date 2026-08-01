@@ -13,8 +13,7 @@ cd "$REPO"
 CGO_ENABLED=1 GOARCH=arm64 "$GO" build -buildmode=c-archive \
     -o macos/Vendor/libprimitive.a ./bridge
 
-ICON_SRC="$REPO/build/appicon.png"
-ICON_DST="$REPO/macos/PrimitiveDos/Assets.xcassets/AppIcon.appiconset/appicon.png"
-if [ -f "$ICON_SRC" ] && [ -d "$(dirname "$ICON_DST")" ]; then
-    cp "$ICON_SRC" "$ICON_DST"
-fi
+# The app icon lives in Assets.xcassets/AppIcon.appiconset as a full macOS
+# size matrix. After regenerating build/appicon.png (go run ./cmd/appicon),
+# refresh the matrix from that folder with sips:
+#   for the 10 sizes, e.g.: sips -z 1024 1024 ../../build/appicon.png --out icon_512x512@2x.png
