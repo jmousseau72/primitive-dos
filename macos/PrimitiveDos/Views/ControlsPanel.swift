@@ -171,7 +171,7 @@ struct ControlsPanel: View {
                 Text("255").font(.caption2)
             }
             .labelsHidden()
-            .controlSize(.small)
+            .controlSize(.mini)
         }
         autoRow("Stroke width", auto: $state.strokeAuto) {
             Slider(
@@ -188,7 +188,7 @@ struct ControlsPanel: View {
                 Text("8").font(.caption2)
             }
             .labelsHidden()
-            .controlSize(.small)
+            .controlSize(.mini)
         }
         .help("Bezier stroke width — thicker is more painterly")
         LabeledContent("Repeat") {
@@ -204,7 +204,7 @@ struct ControlsPanel: View {
     private var sizeRows: some View {
         @Bindable var state = state
         Toggle("Full-resolution input", isOn: $state.inputFullRes)
-            .controlSize(.small)
+            .controlSize(.mini)
         if !state.inputFullRes {
             LabeledContent("Resize input to") {
                 TextField("Pixels", value: $state.inputResize, format: .number.grouping(.never))
@@ -213,7 +213,7 @@ struct ControlsPanel: View {
             }
         }
         Toggle("Output matches input size", isOn: $state.outputMatchInput)
-            .controlSize(.small)
+            .controlSize(.mini)
         if !state.outputMatchInput {
             LabeledContent("Output size") {
                 TextField("Pixels", value: $state.outputSize, format: .number.grouping(.never))
@@ -227,7 +227,7 @@ struct ControlsPanel: View {
     private var colorRows: some View {
         @Bindable var state = state
         Toggle("Average background", isOn: $state.bgAuto)
-            .controlSize(.small)
+            .controlSize(.mini)
         if !state.bgAuto {
             ColorPicker("Background", selection: $state.bgColor, supportsOpacity: false)
         }
@@ -237,7 +237,7 @@ struct ControlsPanel: View {
     private var advancedRows: some View {
         @Bindable var state = state
         Toggle("Use all CPU cores", isOn: $state.workersAll)
-            .controlSize(.small)
+            .controlSize(.mini)
         if !state.workersAll {
             LabeledContent("Workers") {
                 Stepper(value: $state.workers, in: 1...64) {
@@ -247,7 +247,7 @@ struct ControlsPanel: View {
             }
         }
         Toggle("Save checkpoints", isOn: $state.checkpointsOn)
-            .controlSize(.small)
+            .controlSize(.mini)
         if state.checkpointsOn {
             LabeledContent("Every") {
                 HStack(spacing: 4) {
@@ -401,6 +401,6 @@ private struct LogSlider: View {
             Text("Shape count")
         }
         .labelsHidden()
-        .controlSize(.small)
+        .controlSize(.mini)
     }
 }
