@@ -97,6 +97,18 @@ enum Engine {
         try callVoid { PrimitiveCancelRender(cs) }
     }
 
+    /// Continues a finished or document-loaded session with new params.
+    /// For count mode, shapeCount is the TOTAL target.
+    static func continueRender(id: String, params: EngineParams) throws {
+        let cid = cString(id)
+        let cparams = cString(try encode(params))
+        defer {
+            free(cid)
+            free(cparams)
+        }
+        try callVoid { PrimitiveContinueRender(cid, cparams) }
+    }
+
     /// Blocking (GIF export replays the whole model) — call off the main actor.
     static func exportRender(id: String, options: ExportOptions) throws -> [String] {
         let cid = cString(id)

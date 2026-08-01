@@ -177,6 +177,9 @@ type RenderSession struct {
 	lastShapeIdx  int
 	previewRaster bool
 	lastSnapshot  time.Time
+	// needsRebuild marks a document-loaded model whose working raster must
+	// be replayed before stepping can continue.
+	needsRebuild bool
 }
 
 func New(parent context.Context, id string, p Params, emit func(string, any)) (*RenderSession, error) {
@@ -222,6 +225,44 @@ func (s *RenderSession) Cancel() {
 	s.Resume() // wake the loop if it is parked in pause
 }
 
+// Continue picks a finished (or document-loaded) session back up with new
+// params: same input, same shapes so far, then more shapes on top — possibly
+// in a different mode. For count mode, ShapeCount is the total target.
+func (s *RenderSession) Continue(parent context.Context, p Params) error {
+	if !s.Done() {
+		return fmt.Errorf("the render is still active")
+	}
+	s.mu.Lock()
+	model := s.model
+	s.mu.Unlock()
+	if model == nil {
+		return fmt.Errorf("nothing to continue yet")
+	}
+	p.InputPath = s.params.InputPath
+	p.EmitShapeData = s.params.EmitShapeData
+	if err := p.Validate(); err != nil {
+		return err
+	}
+	if !p.unbounded() && p.ShapeCount <= s.stepsDone {
+		return fmt.Errorf("raise the shape count above %s to continue, or switch run mode", formatInt(s.stepsDone))
+	}
+	s.params = p
+	s.ctx, s.cancel = context.WithCancel(parent)
+	s.pauseMu.Lock()
+	s.paused = false
+	s.pauseMu.Unlock()
+	go s.runContinue()
+	return nil
+}
+
+func formatInt(n int) string {
+	out := fmt.Sprintf("%d", n)
+	for i := len(out) - 3; i > 0; i -= 3 {
+		out = out[:i] + "," + out[i:]
+	}
+	return out
+}
+
 func (s *RenderSession) Done() bool {
 	select {
 	case <-s.ctx.Done():
@@ -246,6 +287,19 @@ func (s *RenderSession) fail(format string, args ...any) {
 	s.emit(EvtError, ErrorPayload{SessionID: s.ID, Message: fmt.Sprintf(format, args...)})
 }
 
+// configureEngine sets the per-run engine globals. Safe before a run's
+// workers start stepping; only one session renders at a time.
+func (s *RenderSession) configureEngine() {
+	if s.params.StrokeWidth > 0 {
+		primitive.QuadraticWidth = s.params.StrokeWidth
+		primitive.QuadraticWidthMutate = false
+	} else {
+		primitive.QuadraticWidth = 1
+		primitive.QuadraticWidthMutate = true
+	}
+	primitive.ClearFocus()
+}
+
 func (s *RenderSession) run() {
 	p := s.params
 
@@ -267,16 +321,7 @@ func (s *RenderSession) run() {
 	}
 	bg := ResolveBackground(input, p.Background)
 
-	// Engine configuration for this run. Safe here: workers don't exist yet,
-	// and only one session runs at a time.
-	if p.StrokeWidth > 0 {
-		primitive.QuadraticWidth = p.StrokeWidth
-		primitive.QuadraticWidthMutate = false
-	} else {
-		primitive.QuadraticWidth = 1
-		primitive.QuadraticWidthMutate = true
-	}
-	primitive.ClearFocus()
+	s.configureEngine()
 	defer primitive.ClearFocus()
 
 	s.mu.Lock()
@@ -297,6 +342,53 @@ func (s *RenderSession) run() {
 		InputH:      inputH,
 	})
 
+	s.renderLoop(model, p.stages(), total)
+}
+
+// runContinue picks up a finished or document-loaded session and keeps
+// adding shapes with the (possibly changed) current params. For count mode,
+// ShapeCount is the TOTAL target; unbounded modes behave as usual.
+func (s *RenderSession) runContinue() {
+	p := s.params
+
+	s.configureEngine()
+	defer primitive.ClearFocus()
+
+	s.mu.Lock()
+	model := s.model
+	if s.needsRebuild {
+		model.RebuildCurrent()
+		s.needsRebuild = false
+	}
+	s.mu.Unlock()
+
+	total := 0
+	stage := Stage{Count: 1, Mode: p.Mode, Alpha: p.Alpha, Repeat: p.Repeat}
+	if !p.unbounded() {
+		total = p.ShapeCount
+		stage.Count = total - s.stepsDone
+	}
+
+	s.emit(EvtStarted, StartedPayload{
+		SessionID:   s.ID,
+		Width:       model.Sw,
+		Height:      model.Sh,
+		Scale:       model.Scale,
+		Background:  hexString(model.Background),
+		TotalShapes: total,
+		PreviewMode: PreviewSVG,
+		InputW:      model.Target.Bounds().Dx(),
+		InputH:      model.Target.Bounds().Dy(),
+		Resumed:     true,
+	})
+
+	s.renderLoop(model, []Stage{stage}, total)
+}
+
+// renderLoop is the shared heart of run and runContinue: step, batch, emit,
+// honor pause/cancel/brush, finish.
+func (s *RenderSession) renderLoop(model *primitive.Model, stages []Stage, total int) {
+	p := s.params
 	start := time.Now()
 	lastFlush := start
 	var fragments []string
@@ -389,7 +481,7 @@ func (s *RenderSession) run() {
 
 	cancelled := false
 	if p.unbounded() {
-		stage := p.stages()[0]
+		stage := stages[0]
 		for {
 			if p.RunMode == RunScore && similarityPct(model.Score) >= p.TargetScore {
 				break
@@ -405,7 +497,7 @@ func (s *RenderSession) run() {
 		}
 	} else {
 	outer:
-		for _, stage := range p.stages() {
+		for _, stage := range stages {
 			for i := 0; i < stage.Count; i++ {
 				if stepOnce(stage) {
 					cancelled = true

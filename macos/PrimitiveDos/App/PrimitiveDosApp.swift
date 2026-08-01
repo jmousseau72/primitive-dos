@@ -61,6 +61,12 @@ struct PrimitiveDosApp: App {
                 .keyboardShortcut("p", modifiers: .command)
                 .disabled(!state.isBusy)
 
+                Button("Continue Rendering") {
+                    state.continueRender()
+                }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .disabled(!state.canContinue)
+
                 Button("Stop Render") {
                     state.stop()
                 }

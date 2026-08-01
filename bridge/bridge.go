@@ -192,6 +192,23 @@ func PrimitiveDeletePreset(name *C.char) *C.char {
 	return ok(nil)
 }
 
+//export PrimitiveContinueRender
+func PrimitiveContinueRender(id *C.char, paramsJSON *C.char) *C.char {
+	var p session.Params
+	if err := json.Unmarshal([]byte(C.GoString(paramsJSON)), &p); err != nil {
+		return fail(fmt.Errorf("bad params: %w", err))
+	}
+	return withSession(id, func(s *session.RenderSession) *C.char {
+		if err := s.Continue(rootCtx, p); err != nil {
+			return fail(err)
+		}
+		mu.Lock()
+		active = s
+		mu.Unlock()
+		return ok(nil)
+	})
+}
+
 //export PrimitiveSaveDocument
 func PrimitiveSaveDocument(id *C.char, path *C.char) *C.char {
 	p := C.GoString(path)

@@ -86,6 +86,7 @@ struct StartedPayload: Codable, Sendable {
     let previewMode: String
     let inputW: Int
     let inputH: Int
+    let resumed: Bool?
 }
 
 struct BatchPayload: Codable, Sendable {

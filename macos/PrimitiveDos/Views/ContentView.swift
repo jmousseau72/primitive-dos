@@ -45,6 +45,13 @@ struct ContentView: View {
                 }
                 .disabled(!state.isBusy)
                 .help("Stop the render (⌘.) — you can still export")
+
+                if state.phase == .done {
+                    Button("Restart", systemImage: "arrow.counterclockwise") {
+                        state.start()
+                    }
+                    .help("Start over from zero shapes")
+                }
             }
 
             ToolbarItemGroup {
@@ -108,7 +115,9 @@ struct ContentView: View {
         case .paused:
             ("Resume", "play.fill", true, { state.resume() })
         case .done:
-            ("Restart", "play.fill", true, { state.start() })
+            // Continue keeps every shape and adds more with the current
+            // settings (even a different mode); Restart is its own button.
+            ("Continue", "play.fill", state.canContinue, { state.continueRender() })
         case .loaded:
             ("Start", "play.fill", true, { state.start() })
         case .empty:

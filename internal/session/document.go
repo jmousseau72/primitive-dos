@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -176,7 +177,11 @@ func OpenDocument(path, id string, emit func(string, any)) (*LoadedDocument, err
 	}
 
 	bg := primitive.MakeHexColor(doc.Background)
-	model := primitive.NewModel(input, bg, doc.OutputSize, 1)
+	workers := params.Workers
+	if workers < 1 {
+		workers = runtime.NumCPU()
+	}
+	model := primitive.NewModel(input, bg, doc.OutputSize, workers)
 	for _, ds := range doc.Shapes {
 		shape, ok := shapeFromRecord(ds.ShapeRecord)
 		if !ok {
@@ -191,8 +196,9 @@ func OpenDocument(path, id string, emit func(string, any)) (*LoadedDocument, err
 	}
 	model.Score = doc.Score
 
-	// A pre-cancelled session: Done() is true, stepping never starts, but
-	// the model is live for Export/SaveDocument.
+	// A pre-cancelled session: Done() is true and stepping is idle, but the
+	// model is live for Export/SaveDocument — and Continue() can pick it
+	// back up (needsRebuild replays the working raster first).
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	s := &RenderSession{ID: id, params: params, ctx: ctx, cancel: cancel, emit: emit}
@@ -200,6 +206,7 @@ func OpenDocument(path, id string, emit func(string, any)) (*LoadedDocument, err
 	s.model = model
 	s.stepsDone = doc.StepsDone
 	s.lastShapeIdx = len(model.Shapes)
+	s.needsRebuild = true
 
 	shapes := make([]ShapeRecord, 0, len(doc.Shapes))
 	for _, ds := range doc.Shapes {

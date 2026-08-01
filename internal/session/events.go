@@ -30,6 +30,9 @@ type StartedPayload struct {
 	PreviewMode string  `json:"previewMode"`
 	InputW      int     `json:"inputW"`
 	InputH      int     `json:"inputH"`
+	// Resumed marks a continuation: the frontend keeps its existing canvas
+	// and appends, instead of starting a fresh preview document.
+	Resumed bool `json:"resumed,omitempty"`
 }
 
 type BatchPayload struct {

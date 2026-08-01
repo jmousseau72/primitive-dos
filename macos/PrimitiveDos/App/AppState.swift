@@ -245,18 +245,38 @@ final class AppState {
 
     // MARK: - Render control
 
+    private func ensureCheckpointDir() -> Bool {
+        guard checkpointsOn && checkpointDir.isEmpty else { return true }
+        guard let dir = Self.chooseDirectory(title: "Choose Checkpoint Folder") else {
+            errorMessage = "Checkpoints are enabled but no folder is chosen."
+            return false
+        }
+        checkpointDir = dir
+        return true
+    }
+
     func start() {
         guard let inputInfo, canStart else { return }
-        if checkpointsOn && checkpointDir.isEmpty {
-            guard let dir = Self.chooseDirectory(title: "Choose Checkpoint Folder") else {
-                errorMessage = "Checkpoints are enabled but no folder is chosen."
-                return
-            }
-            checkpointDir = dir
-        }
+        guard ensureCheckpointDir() else { return }
         do {
             sessionStarted = false
             sessionId = try Engine.startRender(buildParams(inputPath: inputInfo.path))
+            phase = .running
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    var canContinue: Bool { phase == .done && sessionStarted && !sessionId.isEmpty }
+
+    /// Continues the finished (or reopened) render: keeps every shape on the
+    /// canvas and adds more with the current sidebar settings — same mode or
+    /// a different one. Count is the total target.
+    func continueRender() {
+        guard canContinue, let inputInfo else { return }
+        guard ensureCheckpointDir() else { return }
+        do {
+            try Engine.continueRender(id: sessionId, params: buildParams(inputPath: inputInfo.path))
             phase = .running
         } catch {
             errorMessage = error.localizedDescription
@@ -498,12 +518,17 @@ final class AppState {
             guard p.sessionId == sessionId else { return }
             sessionStarted = true
             started = p
-            resetStats()
             totalShapes = p.totalShapes
             // Pure shapes by default; in drawing mode the faint source is the
             // painting guide.
             underlayVisible = runMode == .draw
-            previewImage = await renderer.begin(p)
+            if p.resumed != true {
+                // Fresh render: new preview document. Continuations keep the
+                // existing canvas and append.
+                resetStats()
+                totalShapes = p.totalShapes
+                previewImage = await renderer.begin(p)
+            }
             phase = .running
 
         case .batch(let b):
