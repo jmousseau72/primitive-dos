@@ -43,6 +43,12 @@ struct PrimitiveDosApp: App {
                 }
             }
             CommandGroup(after: .saveItem) {
+                Button("Save Document…") {
+                    state.saveDocument()
+                }
+                .keyboardShortcut("s", modifiers: .command)
+                .disabled(!state.sessionStarted)
+
                 Button("Export…") {
                     state.runExport()
                 }

@@ -130,6 +130,27 @@ enum Engine {
         try callVoid { PrimitiveDeletePreset(cs) }
     }
 
+    /// Blocking (reads the source file and serializes every shape) — call
+    /// off the main actor. Safe mid-run.
+    static func saveDocument(id: String, path: String) throws {
+        let cid = cString(id)
+        let cpath = cString(path)
+        defer {
+            free(cid)
+            free(cpath)
+        }
+        try callVoid { PrimitiveSaveDocument(cid, cpath) }
+    }
+
+    /// Blocking (decodes the embedded image and rebuilds the model) — call
+    /// off the main actor. The returned session is done: exportable and
+    /// re-savable, but it never steps.
+    static func loadDocument(path: String) throws -> LoadedDocument {
+        let cs = cString(path)
+        defer { free(cs) }
+        return try callValue(LoadedDocument.self) { PrimitiveLoadDocument(cs) }
+    }
+
     /// Hot path during drawing mode — no JSON, no allocation.
     static func setDrawFocus(x: Double, y: Double, radius: Double, active: Bool) {
         PrimitiveSetDrawFocus(x, y, radius, active ? 1 : 0)

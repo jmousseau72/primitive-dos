@@ -109,6 +109,16 @@ final class AppState {
 
     // MARK: - Input
 
+    /// Single entry for anything the user opens or drops: routes .prim
+    /// documents to the document loader, everything else to image loading.
+    func open(url: URL) async {
+        if url.pathExtension.lowercased() == "prim" {
+            await openDocument(url: url)
+        } else {
+            await loadImage(url: url)
+        }
+    }
+
     func loadImage(url: URL) async {
         guard !isBusy else {
             errorMessage = "Stop the current render before loading a new image."
@@ -156,13 +166,80 @@ final class AppState {
         Task { await renderer.reset() }
     }
 
+    static let primType = UTType(filenameExtension: "prim") ?? .data
+
     func openImagePanel() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = false
-        panel.allowedContentTypes = [.image]
-        panel.title = "Choose an Image"
+        panel.allowedContentTypes = [.image, Self.primType]
+        panel.title = "Choose an Image or Primitive Document"
         if panel.runModal() == .OK, let url = panel.url {
-            Task { await loadImage(url: url) }
+            Task { await open(url: url) }
+        }
+    }
+
+    // MARK: - Documents
+
+    /// Saves the current render — mid-run, paused, or done — as a .prim
+    /// document: params, the embedded source image, and every shape.
+    func saveDocument() {
+        guard sessionStarted, !sessionId.isEmpty else { return }
+        let panel = NSSavePanel()
+        panel.title = "Save Primitive Document"
+        panel.allowedContentTypes = [Self.primType]
+        panel.nameFieldStringValue =
+            ((try? Engine.defaultExportName(id: sessionId)) ?? "render") + ".prim"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let id = sessionId
+        let path = url.path(percentEncoded: false)
+        Task {
+            do {
+                try await Task.detached(priority: .userInitiated) {
+                    try Engine.saveDocument(id: id, path: path)
+                }.value
+                toast = "Saved \(url.lastPathComponent)"
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    /// Reopens a .prim document: controls take its params, the preview is
+    /// rebuilt shape by shape, and export/save work immediately — no
+    /// recompute. Restart re-renders from the embedded source.
+    func openDocument(url: URL) async {
+        guard !isBusy else {
+            errorMessage = "Stop the current render before opening a document."
+            return
+        }
+        let path = url.path(percentEncoded: false)
+        do {
+            toast = "Opening \(url.lastPathComponent)…"
+            let doc = try await Task.detached(priority: .userInitiated) {
+                try Engine.loadDocument(path: path)
+            }.value
+            applyParams(doc.params)
+            selectedPreset = ""
+            presetBaseline = nil
+            inputInfo = doc.input
+            if let data = Data(base64Encoded: doc.input.thumbJpegB64) {
+                sourceImage = NSImage(data: data)
+            }
+            sessionId = doc.sessionId
+            started = doc.started
+            sessionStarted = true
+            underlayVisible = false
+            shapesDone = doc.shapesDone
+            totalShapes = doc.started.totalShapes
+            score = doc.score
+            shapesPerSec = 0
+            elapsedMs = doc.elapsedMs
+            _ = await renderer.begin(doc.started)
+            previewImage = await renderer.append(doc.shapes)
+            phase = .done
+            toast = "Opened \(url.lastPathComponent) — \(doc.shapesDone.formatted()) shapes"
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -253,9 +330,9 @@ final class AppState {
         presets = (try? Engine.listPresets()) ?? []
     }
 
-    func applyPreset(named name: String) {
-        guard let preset = presets.first(where: { $0.name == name }) else { return }
-        let p = preset.params
+    /// Maps engine params back onto the individual controls (used by both
+    /// presets and reopened documents).
+    func applyParams(_ p: EngineParams) {
         mode = p.mode
         shapeCount = p.shapeCount
         alphaAuto = p.alpha == 0
@@ -273,6 +350,14 @@ final class AppState {
         if p.workers > 0 { workers = p.workers }
         runMode = p.runMode
         if p.targetScore > 0 { targetScore = p.targetScore }
+        stagesText = (p.stages ?? [])
+            .map { "\($0.count), \($0.mode), \($0.alpha), \($0.repeatCount)" }
+            .joined(separator: "\n")
+    }
+
+    func applyPreset(named name: String) {
+        guard let preset = presets.first(where: { $0.name == name }) else { return }
+        applyParams(preset.params)
         if !preset.exportFormats.isEmpty { exportFormats = Set(preset.exportFormats) }
         var baseline = buildParams(inputPath: "")
         baseline.autoSave = nil

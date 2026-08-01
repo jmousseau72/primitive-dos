@@ -147,6 +147,17 @@ struct ExportOptions: Codable, Sendable {
     var gif: GIFOptions?
 }
 
+struct LoadedDocument: Codable, Sendable {
+    let sessionId: String
+    let params: EngineParams
+    let input: InputInfo
+    let started: StartedPayload
+    let shapes: [ShapeRecord]
+    let shapesDone: Int
+    let score: Double
+    let elapsedMs: Int
+}
+
 enum EngineEvent: Sendable {
     case started(StartedPayload)
     case batch(BatchPayload)

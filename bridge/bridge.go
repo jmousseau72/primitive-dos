@@ -192,6 +192,66 @@ func PrimitiveDeletePreset(name *C.char) *C.char {
 	return ok(nil)
 }
 
+//export PrimitiveSaveDocument
+func PrimitiveSaveDocument(id *C.char, path *C.char) *C.char {
+	p := C.GoString(path)
+	return withSession(id, func(s *session.RenderSession) *C.char {
+		if err := s.SaveDocument(p); err != nil {
+			return fail(err)
+		}
+		return ok(nil)
+	})
+}
+
+type loadedDocResponse struct {
+	SessionID  string                 `json:"sessionId"`
+	Params     session.Params         `json:"params"`
+	Input      session.InputInfo      `json:"input"`
+	Started    session.StartedPayload `json:"started"`
+	Shapes     []session.ShapeRecord  `json:"shapes"`
+	ShapesDone int                    `json:"shapesDone"`
+	Score      float64                `json:"score"`
+	ElapsedMs  int64                  `json:"elapsedMs"`
+}
+
+//export PrimitiveLoadDocument
+func PrimitiveLoadDocument(path *C.char) *C.char {
+	mu.Lock()
+	if active != nil && !active.Done() {
+		mu.Unlock()
+		return fail(fmt.Errorf("stop the current render before opening a document"))
+	}
+	nextID++
+	id := fmt.Sprintf("s%d", nextID)
+	mu.Unlock()
+
+	loaded, err := session.OpenDocument(C.GoString(path), id, emit)
+	if err != nil {
+		return fail(err)
+	}
+
+	info, err := session.InspectInput(loaded.InputPath, 1600)
+	if err != nil {
+		return fail(err)
+	}
+
+	mu.Lock()
+	sessions = map[string]*session.RenderSession{id: loaded.Session}
+	active = loaded.Session
+	mu.Unlock()
+
+	return ok(loadedDocResponse{
+		SessionID:  id,
+		Params:     loaded.Session.Params(),
+		Input:      info,
+		Started:    loaded.Started,
+		Shapes:     loaded.Shapes,
+		ShapesDone: loaded.StepsDone,
+		Score:      loaded.Score,
+		ElapsedMs:  loaded.ElapsedMs,
+	})
+}
+
 //export PrimitiveSetDrawFocus
 func PrimitiveSetDrawFocus(x, y, radius C.double, activeFlag C.int) {
 	if activeFlag != 0 {

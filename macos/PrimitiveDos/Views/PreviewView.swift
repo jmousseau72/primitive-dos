@@ -15,7 +15,7 @@ struct PreviewView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .dropDestination(for: URL.self) { urls, _ in
             guard let url = urls.first else { return false }
-            Task { await state.loadImage(url: url) }
+            Task { await state.open(url: url) }
             return true
         }
     }
