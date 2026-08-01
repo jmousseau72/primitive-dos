@@ -1,11 +1,12 @@
-// Command docicon generates build/docicon.png — the .prim document icon: a
+// Command docicon generates the .prim document icon in light and dark: a
 // classic macOS page with a folded corner, carrying a small engine-rendered
 // bezier orb. Regenerate with:
 //
 //	go run ./cmd/docicon
 //
-// Then rebuild macos/PrimitiveDos/PrimDocument.icns from it (see
-// macos/Scripts/build-bridge.sh notes for the sips/iconutil recipe).
+// It writes build/docicon.png (light) and build/docicon-dark.png. Rebuild
+// macos/PrimitiveDos/PrimDocument.icns from whichever variant should ship —
+// Finder document icons are a single static image, no appearance switching.
 package main
 
 import (
@@ -29,10 +30,20 @@ const (
 	workers = 8
 )
 
-func drawOrbSource() *gg.Context {
+type theme struct {
+	page, foldFill, border string
+	out                    string
+}
+
+var themes = []theme{
+	{page: "f2f2f5", foldFill: "d4d4da", border: "c2c2c9", out: "build/docicon.png"},
+	{page: "26262c", foldFill: "3c3c44", border: "4a4a52", out: "build/docicon-dark.png"},
+}
+
+func drawOrbSource(pageHex string) *gg.Context {
 	dc := gg.NewContext(srcSize, srcSize)
-	// Transparent-ish backdrop matching the page so strokes blend onto it.
-	dc.SetHexColor("f2f2f5")
+	// Backdrop matching the page so strokes blend onto it.
+	dc.SetHexColor(pageHex)
 	dc.Clear()
 
 	cx, cy := float64(srcSize)*0.5, float64(srcSize)*0.52
@@ -50,12 +61,18 @@ func drawOrbSource() *gg.Context {
 }
 
 func main() {
-	// The orb, reconstructed by the engine like the app icon — the document
-	// wears the same artwork the app does.
 	primitive.QuadraticWidth = strokeW
 	primitive.QuadraticWidthMutate = false
-	src := drawOrbSource()
-	bg := primitive.MakeHexColor("f2f2f5")
+	for _, t := range themes {
+		render(t)
+	}
+}
+
+func render(t theme) {
+	// The orb, reconstructed by the engine like the app icon — the document
+	// wears the same artwork the app does.
+	src := drawOrbSource(t.page)
+	bg := primitive.MakeHexColor(t.page)
 	model := primitive.NewModel(src.Image(), bg, 460, workers)
 	for i := 0; i < steps; i++ {
 		model.Step(primitive.ShapeTypeQuadratic, 255, 0)
@@ -84,7 +101,7 @@ func main() {
 	}
 
 	page()
-	out.SetHexColor("f2f2f5")
+	out.SetHexColor(t.page)
 	out.Fill()
 
 	// Orb artwork centered on the page.
@@ -100,17 +117,17 @@ func main() {
 	out.LineTo(x2-fold, y1+fold)
 	out.LineTo(x2, y1+fold)
 	out.ClosePath()
-	out.SetHexColor("d4d4da")
+	out.SetHexColor(t.foldFill)
 	out.Fill()
 
 	// Page border.
 	page()
-	out.SetHexColor("c2c2c9")
+	out.SetHexColor(t.border)
 	out.SetLineWidth(6)
 	out.Stroke()
 
-	if err := out.SavePNG("build/docicon.png"); err != nil {
+	if err := out.SavePNG(t.out); err != nil {
 		log.Fatal(err)
 	}
-	log.Println("wrote build/docicon.png")
+	log.Println("wrote", t.out)
 }
