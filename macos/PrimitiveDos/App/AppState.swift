@@ -154,6 +154,7 @@ final class AppState {
             return
         }
         guard phase != .empty else { return }
+        resetTimeline()
         inputInfo = nil
         sourceImage = nil
         sessionId = ""
@@ -392,6 +393,113 @@ final class AppState {
         videoExportTask?.cancel()
     }
 
+    // MARK: - Timeline scrubber
+
+    private(set) var timeline: ShapeTimeline?
+    private(set) var timelineCount = 0
+    private(set) var timelinePosition = 0
+    private(set) var timelineLoading = false
+    var timelineVisible = false
+    private var preScrubImage: CGImage?
+
+    var canShowTimeline: Bool { phase == .done && sessionStarted && !sessionId.isEmpty }
+
+    func toggleTimeline() {
+        if timelineVisible {
+            closeTimeline()
+        } else {
+            openTimeline()
+        }
+    }
+
+    private func openTimeline() {
+        guard canShowTimeline, !timelineLoading else { return }
+        let id = sessionId
+        timelineLoading = true
+        Task {
+            do {
+                let data = try await Task.detached(priority: .userInitiated) {
+                    try Engine.getShapes(id: id)
+                }.value
+                guard !data.shapes.isEmpty else {
+                    throw EngineError(message: "no shapes to scrub yet")
+                }
+                let timeline = ShapeTimeline(data: data)
+                await timeline.prepare()
+                guard phase == .done, sessionId == id else { return } // state moved on
+                self.timeline = timeline
+                preScrubImage = previewImage
+                timelineCount = data.shapes.count
+                timelinePosition = data.shapes.count
+                timelineVisible = true
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            timelineLoading = false
+        }
+    }
+
+    /// Drops the scrub view and restores the live render image.
+    func closeTimeline() {
+        if let preScrubImage {
+            previewImage = preScrubImage
+        }
+        resetTimeline()
+    }
+
+    /// Invalidates the timeline without restoring the image (a new render,
+    /// continuation, or clear is about to replace the preview anyway).
+    func resetTimeline() {
+        timelineVisible = false
+        timeline = nil
+        timelineCount = 0
+        timelinePosition = 0
+        preScrubImage = nil
+    }
+
+    func scrubTimeline(to position: Int) {
+        guard let timeline, timelineVisible else { return }
+        let clamped = min(max(0, position), timelineCount)
+        timelinePosition = clamped
+        Task {
+            if let image = await timeline.frame(at: clamped) {
+                previewImage = image
+            }
+        }
+    }
+
+    func exportTimelineFrame() {
+        guard let timeline, timelineVisible else { return }
+        let position = timelinePosition
+        let panel = NSSavePanel()
+        panel.title = "Export Frame"
+        panel.allowedContentTypes = [.png]
+        let base = (try? Engine.defaultExportName(id: sessionId)) ?? "render"
+        panel.nameFieldStringValue = "\(base)-frame\(position).png"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task {
+            guard let image = await timeline.renderFull(at: position) else {
+                errorMessage = "Could not render the frame."
+                return
+            }
+            do {
+                try Self.writePNG(image, to: url)
+                toast = "Exported \(url.lastPathComponent)"
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private static func writePNG(_ image: CGImage, to url: URL) throws {
+        let rep = NSBitmapImageRep(cgImage: image)
+        guard let data = rep.representation(using: .png, properties: [:]) else {
+            throw EngineError(message: "PNG encoding failed")
+        }
+        try data.write(to: url)
+    }
+
     // MARK: - Presets
 
     func refreshPresets() {
@@ -564,6 +672,7 @@ final class AppState {
         switch event {
         case .started(let p):
             guard p.sessionId == sessionId else { return }
+            resetTimeline()
             sessionStarted = true
             started = p
             totalShapes = p.totalShapes

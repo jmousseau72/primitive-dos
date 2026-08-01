@@ -9,8 +9,13 @@ struct ContentView: View {
         @Bindable var state = state
         VStack(spacing: 0) {
             PreviewView()
+            if state.timelineVisible {
+                TimelineBar()
+                    .padding(.bottom, 6)
+            }
             StatsBar()
         }
+        .animation(.easeInOut(duration: 0.2), value: state.timelineVisible)
         .frame(minWidth: 620, minHeight: 480)
         .inspector(isPresented: $showInspector) {
             ControlsPanel()
@@ -60,6 +65,19 @@ struct ContentView: View {
                 }
                 .disabled(state.phase == .empty)
                 .help("Toggle the source-image underlay")
+
+                Button {
+                    state.toggleTimeline()
+                } label: {
+                    if state.timelineLoading {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Label("Timeline", systemImage: state.timelineVisible ? "clock.arrow.circlepath" : "clock")
+                    }
+                }
+                .disabled(!state.canShowTimeline && !state.timelineVisible)
+                .help("Scrub through the shape history")
 
                 Button {
                     state.saveDocument()
