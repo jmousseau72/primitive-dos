@@ -153,7 +153,15 @@ struct ControlsPanel: View {
         }
         LogSlider(value: $state.shapeCount, range: 10...120_000)
         autoRow("Opacity", auto: $state.alphaAuto) {
-            Slider(value: $state.alpha, in: 1...255, step: 1) {
+            // No step: — stepped sliders draw tick marks, which smear into a
+            // ghost line at 255 stops. Quantize in the binding instead.
+            Slider(
+                value: Binding(
+                    get: { state.alpha },
+                    set: { state.alpha = $0.rounded() }
+                ),
+                in: 1...255
+            ) {
                 Text("Opacity")
             } minimumValueLabel: {
                 Text("1").font(.caption2)
@@ -161,9 +169,16 @@ struct ControlsPanel: View {
                 Text("255").font(.caption2)
             }
             .labelsHidden()
+            .controlSize(.small)
         }
         autoRow("Stroke width", auto: $state.strokeAuto) {
-            Slider(value: $state.strokeWidth, in: 0.25...8, step: 0.25) {
+            Slider(
+                value: Binding(
+                    get: { state.strokeWidth },
+                    set: { state.strokeWidth = ($0 / 0.25).rounded() * 0.25 }
+                ),
+                in: 0.25...8
+            ) {
                 Text("Stroke width")
             } minimumValueLabel: {
                 Text("¼").font(.caption2)
@@ -171,6 +186,7 @@ struct ControlsPanel: View {
                 Text("8").font(.caption2)
             }
             .labelsHidden()
+            .controlSize(.small)
         }
         .help("Bezier stroke width — thicker is more painterly")
         LabeledContent("Repeat") {
@@ -375,5 +391,6 @@ private struct LogSlider: View {
             Text("Shape count")
         }
         .labelsHidden()
+        .controlSize(.small)
     }
 }
