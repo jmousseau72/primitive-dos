@@ -82,7 +82,8 @@ struct PrimitiveDosApp: App {
     }
 }
 
-/// Cancels any active render and closes the engine's event stream on quit.
+/// Cancels any active render and closes the engine's event stream on quit;
+/// receives Finder open requests for .prim documents and images.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor var state: AppState?
 
@@ -90,5 +91,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         state?.shutdown()
         return .terminateNow
+    }
+
+    @MainActor
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard let state, let url = urls.first else { return }
+        Task { await state.open(url: url) }
     }
 }
