@@ -75,6 +75,48 @@ func TestMakeShapeRecordCoversAllModes(t *testing.T) {
 	}
 }
 
+// ShapeData must snapshot the full history with scores and model geometry.
+func TestShapeData(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 32, 32))
+	for y := 0; y < 32; y++ {
+		for x := 0; x < 32; x++ {
+			img.Set(x, y, color.RGBA{uint8(x * 8), uint8(y * 8), 60, 255})
+		}
+	}
+	model := primitive.NewModel(img, primitive.MakeHexColor("223344"), 64, 2)
+	for i := 0; i < 4; i++ {
+		model.Step(primitive.ShapeTypeQuadratic, 255, 0)
+	}
+
+	s := &RenderSession{ID: "sd1"}
+	s.model = model
+
+	payload, err := s.ShapeData()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Shapes) != 4 {
+		t.Fatalf("expected 4 shapes, got %d", len(payload.Shapes))
+	}
+	if payload.Width != model.Sw || payload.Height != model.Sh {
+		t.Fatalf("dims %dx%d != model %dx%d", payload.Width, payload.Height, model.Sw, model.Sh)
+	}
+	if payload.Scale != model.Scale {
+		t.Fatalf("scale %v != %v", payload.Scale, model.Scale)
+	}
+	if payload.Background != "#223344" {
+		t.Fatalf("background %q", payload.Background)
+	}
+	for i, ds := range payload.Shapes {
+		if ds.T != "quad" {
+			t.Fatalf("shape %d type %q", i, ds.T)
+		}
+		if ds.S != model.Scores[i] {
+			t.Fatalf("score %d: %v != %v", i, ds.S, model.Scores[i])
+		}
+	}
+}
+
 func assertPoints(t *testing.T, got, want []float64) {
 	t.Helper()
 	if len(got) != len(want) {

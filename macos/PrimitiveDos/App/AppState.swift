@@ -344,6 +344,54 @@ final class AppState {
         return url.path(percentEncoded: false)
     }
 
+    // MARK: - Video export
+
+    var showVideoExportSheet = false
+    var videoSettings = VideoExportSettings()
+    private(set) var videoExportFraction: Double?
+    private var videoExportTask: Task<Void, Never>?
+
+    var canExportVideo: Bool { sessionStarted && !sessionId.isEmpty && videoExportFraction == nil }
+
+    func beginVideoExport() {
+        guard canExportVideo else { return }
+        let panel = NSSavePanel()
+        panel.title = "Export Video"
+        panel.allowedContentTypes = videoSettings.format.fileType == .mov ? [.quickTimeMovie] : [.mpeg4Movie]
+        panel.nameFieldStringValue =
+            ((try? Engine.defaultExportName(id: sessionId)) ?? "render") + "." + videoSettings.format.fileExtension
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        let id = sessionId
+        let settings = videoSettings
+        videoExportFraction = 0
+        videoExportTask = Task {
+            do {
+                let data = try await Task.detached(priority: .userInitiated) {
+                    try Engine.getShapes(id: id)
+                }.value
+                guard !data.shapes.isEmpty else {
+                    throw VideoExportError.setup("no shapes to export yet")
+                }
+                try await VideoExporter.export(data: data, settings: settings, to: url) { [weak self] fraction in
+                    self?.videoExportFraction = fraction
+                }
+                toast = "Exported \(url.lastPathComponent)"
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            } catch is CancellationError {
+                toast = "Video export cancelled"
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            videoExportFraction = nil
+            videoExportTask = nil
+        }
+    }
+
+    func cancelVideoExport() {
+        videoExportTask?.cancel()
+    }
+
     // MARK: - Presets
 
     func refreshPresets() {

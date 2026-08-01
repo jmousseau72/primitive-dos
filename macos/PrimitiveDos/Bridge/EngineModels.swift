@@ -148,6 +148,27 @@ struct ExportOptions: Codable, Sendable {
     var gif: GIFOptions?
 }
 
+/// DocShape from Go: a ShapeRecord flattened together with its post-add
+/// score (Go struct embedding produces {t,p,w,c,s}).
+struct ScoredShapeRecord: Codable, Sendable {
+    let t: String
+    let p: [Double]
+    let w: Double?
+    let c: String
+    let s: Double?
+
+    var record: ShapeRecord { ShapeRecord(t: t, p: p, w: w, c: c) }
+}
+
+/// Full shape history of a session — the timeline/video data source.
+struct ShapeDataPayload: Codable, Sendable {
+    let shapes: [ScoredShapeRecord]
+    let width: Int
+    let height: Int
+    let scale: Double
+    let background: String
+}
+
 struct LoadedDocument: Codable, Sendable {
     let sessionId: String
     let params: EngineParams

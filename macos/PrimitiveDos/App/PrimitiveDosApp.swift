@@ -55,6 +55,12 @@ struct PrimitiveDosApp: App {
                 .keyboardShortcut("e", modifiers: .command)
                 .disabled(!state.canExport)
 
+                Button("Export Video…") {
+                    state.showVideoExportSheet = true
+                }
+                .keyboardShortcut("e", modifiers: [.command, .shift])
+                .disabled(!state.canExportVideo)
+
                 Button(state.phase == .paused ? "Resume" : "Pause") {
                     state.phase == .paused ? state.resume() : state.pause()
                 }

@@ -95,6 +95,25 @@ struct ContentView: View {
         } message: {
             Text(state.errorMessage ?? "")
         }
+        .sheet(isPresented: $state.showVideoExportSheet) {
+            ExportVideoSheet()
+        }
+        .overlay(alignment: .center) {
+            if let fraction = state.videoExportFraction {
+                VStack(spacing: 12) {
+                    Text("Exporting video…")
+                        .font(.callout.weight(.semibold))
+                    ProgressView(value: fraction)
+                        .frame(width: 220)
+                    Button("Cancel") {
+                        state.cancelVideoExport()
+                    }
+                }
+                .padding(24)
+                .background(.regularMaterial, in: .rect(cornerRadius: 14))
+                .shadow(radius: 16, y: 4)
+            }
+        }
         .overlay(alignment: .bottom) {
             if let toast = state.toast {
                 ToastView(message: toast)
