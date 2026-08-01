@@ -16,11 +16,14 @@ struct ContentView: View {
             StatsBar()
         }
         .animation(.easeInOut(duration: 0.2), value: state.timelineVisible)
-        .frame(minWidth: 620, minHeight: 480)
+        .frame(minWidth: 560, minHeight: 480)
         .inspector(isPresented: $showInspector) {
             ControlsPanel()
-                .inspectorColumnWidth(min: 280, ideal: 310, max: 380)
+                .inspectorColumnWidth(min: 300, ideal: 330, max: 420)
         }
+        // Minimum applies to canvas + inspector together, so the window can
+        // never shrink the canvas into a sliver under the panel.
+        .frame(minWidth: 920, minHeight: 560)
         .toolbar {
             ToolbarItemGroup {
                 Button("Open Image", systemImage: "photo.badge.plus") {
