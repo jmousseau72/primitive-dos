@@ -131,6 +131,7 @@ struct ControlsPanel: View {
             HStack {
                 Text("Target")
                 TextField("Similarity", value: $state.targetScore, format: .number.precision(.fractionLength(1)))
+                    .labelsHidden()
                     .frame(width: 64)
                 Text("% similar")
                     .foregroundStyle(.secondary)
@@ -149,6 +150,7 @@ struct ControlsPanel: View {
         ModeGrid(selection: $state.mode)
         LabeledContent("Count") {
             TextField("Shapes", value: $state.shapeCount, format: .number.grouping(.never))
+                .labelsHidden()
                 .frame(width: 80)
         }
         LogSlider(value: $state.shapeCount, range: 10...120_000)
@@ -202,16 +204,20 @@ struct ControlsPanel: View {
     private var sizeRows: some View {
         @Bindable var state = state
         Toggle("Full-resolution input", isOn: $state.inputFullRes)
+            .controlSize(.small)
         if !state.inputFullRes {
             LabeledContent("Resize input to") {
                 TextField("Pixels", value: $state.inputResize, format: .number.grouping(.never))
+                    .labelsHidden()
                     .frame(width: 70)
             }
         }
         Toggle("Output matches input size", isOn: $state.outputMatchInput)
+            .controlSize(.small)
         if !state.outputMatchInput {
             LabeledContent("Output size") {
                 TextField("Pixels", value: $state.outputSize, format: .number.grouping(.never))
+                    .labelsHidden()
                     .frame(width: 70)
             }
         }
@@ -221,6 +227,7 @@ struct ControlsPanel: View {
     private var colorRows: some View {
         @Bindable var state = state
         Toggle("Average background", isOn: $state.bgAuto)
+            .controlSize(.small)
         if !state.bgAuto {
             ColorPicker("Background", selection: $state.bgColor, supportsOpacity: false)
         }
@@ -230,6 +237,7 @@ struct ControlsPanel: View {
     private var advancedRows: some View {
         @Bindable var state = state
         Toggle("Use all CPU cores", isOn: $state.workersAll)
+            .controlSize(.small)
         if !state.workersAll {
             LabeledContent("Workers") {
                 Stepper(value: $state.workers, in: 1...64) {
@@ -239,10 +247,12 @@ struct ControlsPanel: View {
             }
         }
         Toggle("Save checkpoints", isOn: $state.checkpointsOn)
+            .controlSize(.small)
         if state.checkpointsOn {
             LabeledContent("Every") {
                 HStack(spacing: 4) {
                     TextField("N", value: $state.checkpointNth, format: .number.grouping(.never))
+                        .labelsHidden()
                         .frame(width: 56)
                     Text("shapes")
                         .foregroundStyle(.secondary)
