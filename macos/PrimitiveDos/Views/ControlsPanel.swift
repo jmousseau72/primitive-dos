@@ -116,6 +116,8 @@ struct ControlsPanel: View {
             }
         }
         .labelsHidden()
+        .pickerStyle(.menu)
+        .frame(maxWidth: .infinity)
         .onChange(of: state.selectedPreset) {
             if !state.selectedPreset.isEmpty {
                 state.applyPreset(named: state.selectedPreset)

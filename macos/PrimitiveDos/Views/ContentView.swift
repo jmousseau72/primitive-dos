@@ -19,7 +19,7 @@ struct ContentView: View {
         .frame(minWidth: 560, minHeight: 480)
         .inspector(isPresented: $showInspector) {
             ControlsPanel()
-                .inspectorColumnWidth(min: 300, ideal: 330, max: 420)
+                .inspectorColumnWidth(min: 320, ideal: 350, max: 440)
         }
         // Minimum applies to canvas + inspector together, so the window can
         // never shrink the canvas into a sliver under the panel.
