@@ -41,11 +41,14 @@ struct ControlsPanel: View {
             }
         }
         .formStyle(.grouped)
+        .animation(.easeInOut(duration: 0.25), value: state.isBusy)
     }
 
-    /// One collapsible sidebar group. The disclosure chevron always works;
-    /// when `locked` and a render is running, the rows inside dim and
-    /// disable.
+    /// One collapsible sidebar group. While a render runs, locked groups
+    /// force-collapse and dim — a glance tells you the engine owns them —
+    /// then reopen to their remembered state when the run completes. The
+    /// override lives in the binding's getter, so the user's stored
+    /// preference is never overwritten.
     private func group(
         _ title: String,
         isExpanded: Binding<Bool>,
@@ -53,8 +56,12 @@ struct ControlsPanel: View {
         @ViewBuilder rows: @escaping () -> some View
     ) -> some View {
         let dimmed = locked && state.isBusy
+        let effectiveExpansion = Binding<Bool>(
+            get: { isExpanded.wrappedValue && !dimmed },
+            set: { isExpanded.wrappedValue = $0 }
+        )
         return Section {
-            DisclosureGroup(isExpanded: isExpanded) {
+            DisclosureGroup(isExpanded: effectiveExpansion) {
                 rows()
                     .disabled(dimmed)
                     .opacity(dimmed ? 0.45 : 1)
