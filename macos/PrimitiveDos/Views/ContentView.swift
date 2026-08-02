@@ -139,7 +139,10 @@ struct ContentView: View {
             if let toast = state.toast {
                 ToastView(message: toast)
                     .padding(.bottom, 52)
-                    .task {
+                    // id: restarts the dismiss timer for each new message —
+                    // without it a second toast inherits the first one's
+                    // timer and never clears.
+                    .task(id: toast) {
                         try? await Task.sleep(for: .seconds(4))
                         if state.toast == toast { state.toast = nil }
                     }

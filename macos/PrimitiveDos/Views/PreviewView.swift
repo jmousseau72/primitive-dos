@@ -33,9 +33,9 @@ struct PreviewView: View {
                         .opacity(state.underlayOpacity)
                         .grayscale(state.underlayColorful ? 0 : 0.5)
                 } else if state.transparentBackground {
-                    CheckerboardRect()
+                    CheckerboardRect(aspect: renderAspect)
                 } else if let bg = state.started?.background, let color = Color(hex: bg) {
-                    ContentAspectRect(color: color)
+                    ContentAspectRect(color: color, aspect: renderAspect)
                 }
                 if let image = state.previewImage {
                     Image(decorative: image, scale: 1)
@@ -82,23 +82,33 @@ struct PreviewView: View {
         guard (0...1).contains(fx), (0...1).contains(fy) else { return nil }
         return CGPoint(x: fx * CGFloat(started.inputW), y: fy * CGFloat(started.inputH))
     }
+
+    /// The render's aspect ratio — the background layers must match the
+    /// shapes image exactly or wide/tall images show a mismatched plate.
+    private var renderAspect: CGFloat? {
+        guard let started = state.started, started.height > 0 else { return nil }
+        return CGFloat(started.width) / CGFloat(started.height)
+    }
 }
 
 /// A colored rectangle matching the render's aspect ratio inside the
 /// aspect-fit layout, standing in for the SVG background rect.
 private struct ContentAspectRect: View {
     let color: Color
+    let aspect: CGFloat?
 
     var body: some View {
         Rectangle()
             .fill(color)
-            .aspectRatio(contentMode: .fit)
+            .aspectRatio(aspect, contentMode: .fit)
     }
 }
 
 /// Classic transparency checkerboard, shown when exports will omit the
 /// background so the preview reads as "shapes on alpha".
 private struct CheckerboardRect: View {
+    let aspect: CGFloat?
+
     var body: some View {
         Canvas { context, size in
             let tile: CGFloat = 8
@@ -114,7 +124,7 @@ private struct CheckerboardRect: View {
             }
         }
         .background(Color.gray.opacity(0.1))
-        .aspectRatio(contentMode: .fit)
+        .aspectRatio(aspect, contentMode: .fit)
     }
 }
 
