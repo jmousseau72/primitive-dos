@@ -27,11 +27,16 @@ struct TimelineBar: View {
                 .foregroundStyle(.secondary)
                 .frame(minWidth: 110, alignment: .trailing)
 
-            Button("Export Frame…") {
-                state.exportTimelineFrame()
+            Menu("Export Frame…") {
+                Button("PNG…") { state.exportTimelineFrame(.png) }
+                Button("JPEG…") { state.exportTimelineFrame(.jpg) }
+                Button("SVG…") { state.exportTimelineFrame(.svg) }
+                Divider()
+                Button("Composite over Source…") { state.exportTimelineFrame(.composite) }
             }
+            .fixedSize()
             .disabled(state.timelinePosition == 0)
-            .help("Save this moment as a full-resolution PNG")
+            .help("Save this moment at full resolution — the composite bakes the sketch over the source photo")
         }
         .padding(.horizontal)
         .padding(.vertical, 8)

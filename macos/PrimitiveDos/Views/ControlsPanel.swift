@@ -11,6 +11,7 @@ struct ControlsPanel: View {
     @AppStorage("panel.shapes") private var shapesExpanded = true
     @AppStorage("panel.size") private var sizeExpanded = false
     @AppStorage("panel.color") private var colorExpanded = false
+    @AppStorage("panel.underlay") private var underlayExpanded = false
     @AppStorage("panel.advanced") private var advancedExpanded = false
     @AppStorage("panel.export") private var exportExpanded = true
 
@@ -30,6 +31,11 @@ struct ControlsPanel: View {
             }
             group("Color", isExpanded: $colorExpanded, locked: true) {
                 colorRows
+            }
+            // Underlay stays live during runs — it's a view/export setting,
+            // not an engine parameter.
+            group("Underlay", isExpanded: $underlayExpanded, locked: false) {
+                underlayRows
             }
             group("Advanced", isExpanded: $advancedExpanded, locked: true) {
                 advancedRows
@@ -270,6 +276,22 @@ struct ControlsPanel: View {
         if !state.bgAuto {
             ColorPicker("Background", selection: $state.bgColor, supportsOpacity: false)
         }
+    }
+
+    @ViewBuilder
+    private var underlayRows: some View {
+        @Bindable var state = state
+        Toggle("Show under the shapes", isOn: $state.underlayVisible)
+            .controlSize(.mini)
+            .disabled(state.phase == .empty)
+        LabeledContent("Opacity") {
+            Slider(value: $state.underlayOpacity, in: 0.05...1)
+                .controlSize(.mini)
+                .frame(width: 130)
+        }
+        Toggle("Keep source colors", isOn: $state.underlayColorful)
+            .controlSize(.mini)
+            .help("Off shows the source desaturated; on keeps its full color — both apply to composite exports too")
     }
 
     @ViewBuilder

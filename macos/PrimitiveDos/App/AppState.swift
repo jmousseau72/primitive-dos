@@ -33,6 +33,8 @@ final class AppState {
     private(set) var elapsedMs = 0
 
     var underlayVisible = false
+    var underlayOpacity = 0.3
+    var underlayColorful = false
     var toast: String?
     var errorMessage: String?
     var isExporting = false
@@ -483,22 +485,61 @@ final class AppState {
         }
     }
 
-    func exportTimelineFrame() {
+    enum TimelineFrameFormat: String {
+        case png, jpg, svg
+        case composite // PNG of source-at-reduced-opacity beneath the shapes
+
+        var fileExtension: String { self == .composite ? "png" : rawValue }
+
+        var contentType: UTType {
+            switch self {
+            case .png, .composite: .png
+            case .jpg: .jpeg
+            case .svg: UTType(filenameExtension: "svg") ?? .xml
+            }
+        }
+    }
+
+    func exportTimelineFrame(_ format: TimelineFrameFormat) {
         guard let timeline, timelineVisible else { return }
         let position = timelinePosition
         let panel = NSSavePanel()
         panel.title = "Export Frame"
-        panel.allowedContentTypes = [.png]
+        panel.allowedContentTypes = [format.contentType]
         let base = (try? Engine.defaultExportName(id: sessionId)) ?? "render"
-        panel.nameFieldStringValue = "\(base)-frame\(position).png"
+        let suffix = format == .composite ? "-composite" : ""
+        panel.nameFieldStringValue = "\(base)-frame\(position)\(suffix).\(format.fileExtension)"
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        let opacity = underlayOpacity
+        let colorful = underlayColorful
+        let sourcePath = inputInfo?.path
         Task {
-            guard let image = await timeline.renderFull(at: position) else {
-                errorMessage = "Could not render the frame."
-                return
-            }
             do {
-                try Self.writePNG(image, to: url)
+                switch format {
+                case .svg:
+                    let document = await timeline.svgDocument(at: position)
+                    try document.write(to: url, atomically: true, encoding: .utf8)
+                case .png, .jpg:
+                    guard let image = await timeline.renderFull(at: position) else {
+                        throw EngineError(message: "Could not render the frame.")
+                    }
+                    try Self.writeImage(image, to: url, jpeg: format == .jpg)
+                case .composite:
+                    guard
+                        let sourcePath,
+                        let nsImage = NSImage(contentsOfFile: sourcePath),
+                        var source = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil)
+                    else { throw EngineError(message: "Could not load the source image.") }
+                    if !colorful, let gray = Self.grayscaled(source) {
+                        source = gray
+                    }
+                    guard let image = await timeline.renderComposite(
+                        at: position,
+                        source: source,
+                        sourceOpacity: opacity
+                    ) else { throw EngineError(message: "Could not render the composite.") }
+                    try Self.writeImage(image, to: url, jpeg: false)
+                }
                 toast = "Exported \(url.lastPathComponent)"
                 NSWorkspace.shared.activateFileViewerSelecting([url])
             } catch {
@@ -507,12 +548,29 @@ final class AppState {
         }
     }
 
-    private static func writePNG(_ image: CGImage, to url: URL) throws {
+    private static func writeImage(_ image: CGImage, to url: URL, jpeg: Bool) throws {
         let rep = NSBitmapImageRep(cgImage: image)
-        guard let data = rep.representation(using: .png, properties: [:]) else {
-            throw EngineError(message: "PNG encoding failed")
+        let data = jpeg
+            ? rep.representation(using: .jpeg, properties: [.compressionFactor: 0.95])
+            : rep.representation(using: .png, properties: [:])
+        guard let data else {
+            throw EngineError(message: "Image encoding failed")
         }
         try data.write(to: url)
+    }
+
+    private static func grayscaled(_ image: CGImage) -> CGImage? {
+        guard let context = CGContext(
+            data: nil,
+            width: image.width,
+            height: image.height,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceGray(),
+            bitmapInfo: CGImageAlphaInfo.none.rawValue
+        ) else { return nil }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        return context.makeImage()
     }
 
     // MARK: - Presets

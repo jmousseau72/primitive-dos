@@ -91,6 +91,60 @@ actor ShapeTimeline {
 
     var backgroundHex: String { data.background }
 
+    /// SVG document of the prefix — same output the Go engine would produce
+    /// for these shapes.
+    func svgDocument(at position: Int) -> String {
+        let target = min(max(0, position), data.shapes.count)
+        return SVGAssembler.svg(
+            shapes: data.shapes[0..<target],
+            width: data.width,
+            height: data.height,
+            scale: data.scale,
+            background: data.background
+        )
+    }
+
+    /// Full-resolution composite: background color, then the source image at
+    /// reduced opacity, then the shape prefix on top — the "sketch over the
+    /// photo" effect, baked into one image.
+    func renderComposite(
+        at position: Int,
+        source: CGImage,
+        sourceOpacity: Double
+    ) -> CGImage? {
+        let pw = data.width
+        let ph = data.height
+        guard let context = CGContext(
+            data: nil,
+            width: pw,
+            height: ph,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+
+        if let bg = ShapeDrawing.cgColor(data.background) {
+            context.setFillColor(bg)
+            context.fill(CGRect(x: 0, y: 0, width: pw, height: ph))
+        }
+        context.saveGState()
+        context.setAlpha(CGFloat(min(max(sourceOpacity, 0), 1)))
+        context.draw(source, in: CGRect(x: 0, y: 0, width: pw, height: ph))
+        context.restoreGState()
+
+        context.translateBy(x: 0, y: CGFloat(ph))
+        context.scaleBy(x: 1, y: -1)
+        context.scaleBy(x: data.scale, y: data.scale)
+        context.translateBy(x: 0.5, y: 0.5)
+        context.setShouldAntialias(true)
+        let target = min(max(0, position), data.shapes.count)
+        for i in 0..<target {
+            ShapeDrawing.draw(data.shapes[i].record, in: context)
+        }
+        return context.makeImage()
+    }
+
     /// Shared context recipe: same transform stack as the preview/video.
     private static func makeContext(
         modelW: Int,

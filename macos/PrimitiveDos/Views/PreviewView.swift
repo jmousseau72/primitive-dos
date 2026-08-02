@@ -30,8 +30,8 @@ struct PreviewView: View {
                         .resizable()
                         .interpolation(.high)
                         .scaledToFit()
-                        .opacity(0.3)
-                        .grayscale(0.5)
+                        .opacity(state.underlayOpacity)
+                        .grayscale(state.underlayColorful ? 0 : 0.5)
                 } else if let bg = state.started?.background, let color = Color(hex: bg) {
                     ContentAspectRect(color: color)
                 }
