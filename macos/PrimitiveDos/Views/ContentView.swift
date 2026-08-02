@@ -111,6 +111,9 @@ struct ContentView: View {
         }
         .navigationTitle("Primitive Dos")
         .preferredColorScheme(AppAppearance(rawValue: appearanceMode)?.colorScheme)
+        .background(WindowAccessor { window in
+            state.installCloseGuard(on: window)
+        })
         .alert("Something went wrong", isPresented: errorBinding) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -176,6 +179,23 @@ struct ContentView: View {
             }
         )
     }
+}
+
+/// Hands the hosting NSWindow to SwiftUI code (for the close-button guard).
+private struct WindowAccessor: NSViewRepresentable {
+    let onWindow: @MainActor (NSWindow) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            if let window = view.window {
+                onWindow(window)
+            }
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
 /// A floppy-disk save glyph (SF Symbols has no floppy), drawn in the same

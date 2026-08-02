@@ -38,6 +38,8 @@ final class AppState {
     /// Exports PNG/SVG without the background (shapes on alpha). Rendering
     /// still optimizes against the background color.
     var transparentBackground = false
+    /// True when shapes exist that were never saved to a .prim document.
+    private(set) var documentDirty = false
     var toast: String?
     var errorMessage: String?
     var isExporting = false
@@ -167,13 +169,15 @@ final class AppState {
     }
 
     /// Clears the loaded image and any finished render, returning to the
-    /// drop-zone state. Stop the render first if one is active.
+    /// drop-zone state. Stop the render first if one is active; unsaved
+    /// work gets the same Save/Don't Save/Cancel guard as quitting.
     func clearImage() {
         guard !isBusy else {
             errorMessage = "Stop the current render before clearing the image."
             return
         }
         guard phase != .empty else { return }
+        guard confirmDiscardOrSave() else { return }
         resetTimeline()
         inputInfo = nil
         sourceImage = nil
@@ -218,11 +222,74 @@ final class AppState {
                 try await Task.detached(priority: .userInitiated) {
                     try Engine.saveDocument(id: id, path: path)
                 }.value
+                documentDirty = false
                 toast = "Saved \(url.lastPathComponent)"
             } catch {
                 errorMessage = error.localizedDescription
             }
         }
+    }
+
+    // MARK: - Unsaved-work guard
+
+    var hasUnsavedWork: Bool {
+        sessionStarted && !sessionId.isEmpty && shapesDone > 0 && documentDirty
+    }
+
+    /// Standard Save / Don't Save / Cancel flow. Returns true when it is
+    /// safe to proceed (work saved, discarded, or there was none).
+    func confirmDiscardOrSave() -> Bool {
+        guard hasUnsavedWork else { return true }
+        let alert = NSAlert()
+        alert.messageText = "Save this render as a Primitive document?"
+        alert.informativeText = "The \(shapesDone.formatted())-shape render will be lost unless you save it as a .prim document. Image exports you already made are unaffected."
+        alert.addButton(withTitle: "Save…")
+        alert.addButton(withTitle: "Don't Save")
+        alert.addButton(withTitle: "Cancel")
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            return saveDocumentBlocking()
+        case .alertSecondButtonReturn:
+            documentDirty = false
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Synchronous save for the quit/close path. Blocking the main thread
+    /// briefly here is fine — the app is on its way out.
+    private func saveDocumentBlocking() -> Bool {
+        guard sessionStarted, !sessionId.isEmpty else { return true }
+        let panel = NSSavePanel()
+        panel.title = "Save Primitive Document"
+        panel.allowedContentTypes = [Self.primType]
+        panel.nameFieldStringValue =
+            ((try? Engine.defaultExportName(id: sessionId)) ?? "render") + ".prim"
+        guard panel.runModal() == .OK, let url = panel.url else { return false }
+        do {
+            try Engine.saveDocument(id: sessionId, path: url.path(percentEncoded: false))
+            documentDirty = false
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    // MARK: - Window close interception
+
+    private var closePrompter: ClosePrompter?
+
+    /// Chains onto the window's SwiftUI-owned delegate so the red close
+    /// button runs the same save prompt as quitting.
+    func installCloseGuard(on window: NSWindow) {
+        guard closePrompter == nil else { return }
+        let prompter = ClosePrompter()
+        prompter.state = self
+        prompter.original = window.delegate
+        window.delegate = prompter
+        closePrompter = prompter
     }
 
     /// Reopens a .prim document: controls take its params, the preview is
@@ -754,6 +821,7 @@ final class AppState {
             guard p.sessionId == sessionId else { return }
             resetTimeline()
             sessionStarted = true
+            documentDirty = true
             started = p
             totalShapes = p.totalShapes
             // Pure shapes by default; in drawing mode the faint source is the
@@ -818,6 +886,32 @@ final class AppState {
         score = 0
         shapesPerSec = 0
         elapsedMs = 0
+    }
+}
+
+// MARK: - Window-close delegate chain
+
+/// Forwards everything to SwiftUI's own window delegate except
+/// windowShouldClose, which runs the unsaved-work prompt first.
+final class ClosePrompter: NSObject, NSWindowDelegate {
+    @MainActor weak var state: AppState?
+    weak var original: NSWindowDelegate?
+
+    override func forwardingTarget(for aSelector: Selector!) -> Any? {
+        original
+    }
+
+    override func responds(to aSelector: Selector!) -> Bool {
+        if aSelector == #selector(NSWindowDelegate.windowShouldClose(_:)) {
+            return true
+        }
+        return super.responds(to: aSelector) || (original?.responds(to: aSelector) ?? false)
+    }
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        MainActor.assumeIsolated {
+            state?.confirmDiscardOrSave() ?? true
+        }
     }
 }
 
