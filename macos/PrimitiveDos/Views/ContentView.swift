@@ -9,13 +9,21 @@ struct ContentView: View {
         @Bindable var state = state
         VStack(spacing: 0) {
             PreviewView()
+            if state.timelineVisible {
+                TimelineBar()
+                    .padding(.bottom, 6)
+            }
             StatsBar()
         }
-        .frame(minWidth: 620, minHeight: 480)
+        .animation(.easeInOut(duration: 0.2), value: state.timelineVisible)
+        .frame(minWidth: 560, minHeight: 480)
         .inspector(isPresented: $showInspector) {
             ControlsPanel()
-                .inspectorColumnWidth(min: 280, ideal: 310, max: 380)
+                .inspectorColumnWidth(min: 320, ideal: 350, max: 440)
         }
+        // Minimum applies to canvas + inspector together, so the window can
+        // never shrink the canvas into a sliver under the panel.
+        .frame(minWidth: 920, minHeight: 560)
         .toolbar {
             ToolbarItemGroup {
                 Button("Open Image", systemImage: "photo.badge.plus") {
@@ -62,6 +70,19 @@ struct ContentView: View {
                 .help("Toggle the source-image underlay")
 
                 Button {
+                    state.toggleTimeline()
+                } label: {
+                    if state.timelineLoading {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Label("Timeline", systemImage: state.timelineVisible ? "clock.arrow.circlepath" : "clock")
+                    }
+                }
+                .disabled(!state.canShowTimeline && !state.timelineVisible)
+                .help("Scrub through the shape history")
+
+                Button {
                     state.saveDocument()
                 } label: {
                     Label {
@@ -90,16 +111,41 @@ struct ContentView: View {
         }
         .navigationTitle("Primitive Dos")
         .preferredColorScheme(AppAppearance(rawValue: appearanceMode)?.colorScheme)
+        .background(WindowAccessor { window in
+            state.installCloseGuard(on: window)
+        })
         .alert("Something went wrong", isPresented: errorBinding) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(state.errorMessage ?? "")
         }
+        .sheet(isPresented: $state.showVideoExportSheet) {
+            ExportVideoSheet()
+        }
+        .overlay(alignment: .center) {
+            if let fraction = state.videoExportFraction {
+                VStack(spacing: 12) {
+                    Text("Exporting video…")
+                        .font(.callout.weight(.semibold))
+                    ProgressView(value: fraction)
+                        .frame(width: 220)
+                    Button("Cancel") {
+                        state.cancelVideoExport()
+                    }
+                }
+                .padding(24)
+                .background(.regularMaterial, in: .rect(cornerRadius: 14))
+                .shadow(radius: 16, y: 4)
+            }
+        }
         .overlay(alignment: .bottom) {
             if let toast = state.toast {
                 ToastView(message: toast)
                     .padding(.bottom, 52)
-                    .task {
+                    // id: restarts the dismiss timer for each new message —
+                    // without it a second toast inherits the first one's
+                    // timer and never clears.
+                    .task(id: toast) {
                         try? await Task.sleep(for: .seconds(4))
                         if state.toast == toast { state.toast = nil }
                     }
@@ -133,6 +179,23 @@ struct ContentView: View {
             }
         )
     }
+}
+
+/// Hands the hosting NSWindow to SwiftUI code (for the close-button guard).
+private struct WindowAccessor: NSViewRepresentable {
+    let onWindow: @MainActor (NSWindow) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            if let window = view.window {
+                onWindow(window)
+            }
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
 /// A floppy-disk save glyph (SF Symbols has no floppy), drawn in the same

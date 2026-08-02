@@ -28,6 +28,42 @@ type ShapeRecord struct {
 	C string    `json:"c"` // rrggbbaa
 }
 
+// ShapeDataPayload is the one-shot snapshot of a session's full shape
+// history — what the Mac app's timeline scrubber and video export replay.
+// Coordinates and transform semantics match StartedPayload/Model.SVG().
+type ShapeDataPayload struct {
+	Shapes     []DocShape `json:"shapes"`
+	Width      int        `json:"width"`
+	Height     int        `json:"height"`
+	Scale      float64    `json:"scale"`
+	Background string     `json:"background"`
+}
+
+// ShapeData snapshots the model's shapes, colors, and scores. Safe mid-run:
+// a single lock acquisition between steps, same contract as Export.
+func (s *RenderSession) ShapeData() (ShapeDataPayload, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.model == nil {
+		return ShapeDataPayload{}, fmt.Errorf("nothing to export yet")
+	}
+	payload := ShapeDataPayload{
+		Width:      s.model.Sw,
+		Height:     s.model.Sh,
+		Scale:      s.model.Scale,
+		Background: hexString(s.model.Background),
+		Shapes:     make([]DocShape, 0, len(s.model.Shapes)),
+	}
+	for i, shape := range s.model.Shapes {
+		ds := DocShape{ShapeRecord: makeShapeRecord(shape, s.model.Colors[i])}
+		if i < len(s.model.Scores) {
+			ds.S = s.model.Scores[i]
+		}
+		payload.Shapes = append(payload.Shapes, ds)
+	}
+	return payload, nil
+}
+
 func makeShapeRecord(shape primitive.Shape, c primitive.Color) ShapeRecord {
 	rec := ShapeRecord{C: fmt.Sprintf("%02x%02x%02x%02x", c.R, c.G, c.B, c.A)}
 	switch s := shape.(type) {

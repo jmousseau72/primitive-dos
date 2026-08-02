@@ -5,6 +5,7 @@
 // controls disable while running; loading a new image requires stopping.
 
 import AppKit
+import OSLog
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -32,6 +33,13 @@ final class AppState {
     private(set) var elapsedMs = 0
 
     var underlayVisible = false
+    var underlayOpacity = 0.3
+    var underlayColorful = false
+    /// Exports PNG/SVG without the background (shapes on alpha). Rendering
+    /// still optimizes against the background color.
+    var transparentBackground = false
+    /// True when shapes exist that were never saved to a .prim document.
+    private(set) var documentDirty = false
     var toast: String?
     var errorMessage: String?
     var isExporting = false
@@ -41,9 +49,23 @@ final class AppState {
 
     var mode = 6
     var shapeCount = 2000
-    var alphaAuto = false
+    var alphaAuto = false {
+        didSet {
+            if alphaAuto != oldValue {
+                Logger(subsystem: "com.jmousseau.primitivedos", category: "controls")
+                    .debug("alphaAuto -> \(self.alphaAuto)")
+            }
+        }
+    }
     var alpha = 255.0
-    var strokeAuto = false
+    var strokeAuto = false {
+        didSet {
+            if strokeAuto != oldValue {
+                Logger(subsystem: "com.jmousseau.primitivedos", category: "controls")
+                    .debug("strokeAuto -> \(self.strokeAuto)")
+            }
+        }
+    }
     var strokeWidth = 0.5
     var repeatCount = 0
     var inputFullRes = true
@@ -147,13 +169,16 @@ final class AppState {
     }
 
     /// Clears the loaded image and any finished render, returning to the
-    /// drop-zone state. Stop the render first if one is active.
+    /// drop-zone state. Stop the render first if one is active; unsaved
+    /// work gets the same Save/Don't Save/Cancel guard as quitting.
     func clearImage() {
         guard !isBusy else {
             errorMessage = "Stop the current render before clearing the image."
             return
         }
         guard phase != .empty else { return }
+        guard confirmDiscardOrSave() else { return }
+        resetTimeline()
         inputInfo = nil
         sourceImage = nil
         sessionId = ""
@@ -197,11 +222,74 @@ final class AppState {
                 try await Task.detached(priority: .userInitiated) {
                     try Engine.saveDocument(id: id, path: path)
                 }.value
+                documentDirty = false
                 toast = "Saved \(url.lastPathComponent)"
             } catch {
                 errorMessage = error.localizedDescription
             }
         }
+    }
+
+    // MARK: - Unsaved-work guard
+
+    var hasUnsavedWork: Bool {
+        sessionStarted && !sessionId.isEmpty && shapesDone > 0 && documentDirty
+    }
+
+    /// Standard Save / Don't Save / Cancel flow. Returns true when it is
+    /// safe to proceed (work saved, discarded, or there was none).
+    func confirmDiscardOrSave() -> Bool {
+        guard hasUnsavedWork else { return true }
+        let alert = NSAlert()
+        alert.messageText = "Save this render as a Primitive document?"
+        alert.informativeText = "The \(shapesDone.formatted())-shape render will be lost unless you save it as a .prim document. Image exports you already made are unaffected."
+        alert.addButton(withTitle: "Save…")
+        alert.addButton(withTitle: "Don't Save")
+        alert.addButton(withTitle: "Cancel")
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            return saveDocumentBlocking()
+        case .alertSecondButtonReturn:
+            documentDirty = false
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Synchronous save for the quit/close path. Blocking the main thread
+    /// briefly here is fine — the app is on its way out.
+    private func saveDocumentBlocking() -> Bool {
+        guard sessionStarted, !sessionId.isEmpty else { return true }
+        let panel = NSSavePanel()
+        panel.title = "Save Primitive Document"
+        panel.allowedContentTypes = [Self.primType]
+        panel.nameFieldStringValue =
+            ((try? Engine.defaultExportName(id: sessionId)) ?? "render") + ".prim"
+        guard panel.runModal() == .OK, let url = panel.url else { return false }
+        do {
+            try Engine.saveDocument(id: sessionId, path: url.path(percentEncoded: false))
+            documentDirty = false
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    // MARK: - Window close interception
+
+    private var closePrompter: ClosePrompter?
+
+    /// Chains onto the window's SwiftUI-owned delegate so the red close
+    /// button runs the same save prompt as quitting.
+    func installCloseGuard(on window: NSWindow) {
+        guard closePrompter == nil else { return }
+        let prompter = ClosePrompter()
+        prompter.state = self
+        prompter.original = window.delegate
+        window.delegate = prompter
+        closePrompter = prompter
     }
 
     /// Reopens a .prim document: controls take its params, the preview is
@@ -318,7 +406,8 @@ final class AppState {
                     dir: dir,
                     baseName: baseName,
                     formats: formats,
-                    gif: formats.contains("gif") ? GIFOptions() : nil
+                    gif: formats.contains("gif") ? GIFOptions() : nil,
+                    transparentBackground: transparentBackground
                 )
                 let paths = try await Task.detached(priority: .userInitiated) {
                     try Engine.exportRender(id: id, options: options)
@@ -342,6 +431,220 @@ final class AppState {
         panel.title = title
         guard panel.runModal() == .OK, let url = panel.url else { return nil }
         return url.path(percentEncoded: false)
+    }
+
+    // MARK: - Video export
+
+    var showVideoExportSheet = false
+    var videoSettings = VideoExportSettings()
+    private(set) var videoExportFraction: Double?
+    private var videoExportTask: Task<Void, Never>?
+
+    var canExportVideo: Bool { sessionStarted && !sessionId.isEmpty && videoExportFraction == nil }
+
+    func beginVideoExport() {
+        guard canExportVideo else { return }
+        let panel = NSSavePanel()
+        panel.title = "Export Video"
+        panel.allowedContentTypes = videoSettings.format.fileType == .mov ? [.quickTimeMovie] : [.mpeg4Movie]
+        panel.nameFieldStringValue =
+            ((try? Engine.defaultExportName(id: sessionId)) ?? "render") + "." + videoSettings.format.fileExtension
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        let id = sessionId
+        let settings = videoSettings
+        videoExportFraction = 0
+        videoExportTask = Task {
+            do {
+                let data = try await Task.detached(priority: .userInitiated) {
+                    try Engine.getShapes(id: id)
+                }.value
+                guard !data.shapes.isEmpty else {
+                    throw VideoExportError.setup("no shapes to export yet")
+                }
+                try await VideoExporter.export(data: data, settings: settings, to: url) { [weak self] fraction in
+                    self?.videoExportFraction = fraction
+                }
+                toast = "Exported \(url.lastPathComponent)"
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            } catch is CancellationError {
+                toast = "Video export cancelled"
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            videoExportFraction = nil
+            videoExportTask = nil
+        }
+    }
+
+    func cancelVideoExport() {
+        videoExportTask?.cancel()
+    }
+
+    // MARK: - Timeline scrubber
+
+    private(set) var timeline: ShapeTimeline?
+    private(set) var timelineCount = 0
+    private(set) var timelinePosition = 0
+    private(set) var timelineLoading = false
+    var timelineVisible = false
+    private var preScrubImage: CGImage?
+
+    var canShowTimeline: Bool { phase == .done && sessionStarted && !sessionId.isEmpty }
+
+    func toggleTimeline() {
+        if timelineVisible {
+            closeTimeline()
+        } else {
+            openTimeline()
+        }
+    }
+
+    private func openTimeline() {
+        guard canShowTimeline, !timelineLoading else { return }
+        let id = sessionId
+        timelineLoading = true
+        Task {
+            do {
+                let data = try await Task.detached(priority: .userInitiated) {
+                    try Engine.getShapes(id: id)
+                }.value
+                guard !data.shapes.isEmpty else {
+                    throw EngineError(message: "no shapes to scrub yet")
+                }
+                let timeline = ShapeTimeline(data: data)
+                await timeline.prepare()
+                guard phase == .done, sessionId == id else { return } // state moved on
+                self.timeline = timeline
+                preScrubImage = previewImage
+                timelineCount = data.shapes.count
+                timelinePosition = data.shapes.count
+                timelineVisible = true
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            timelineLoading = false
+        }
+    }
+
+    /// Drops the scrub view and restores the live render image.
+    func closeTimeline() {
+        if let preScrubImage {
+            previewImage = preScrubImage
+        }
+        resetTimeline()
+    }
+
+    /// Invalidates the timeline without restoring the image (a new render,
+    /// continuation, or clear is about to replace the preview anyway).
+    func resetTimeline() {
+        timelineVisible = false
+        timeline = nil
+        timelineCount = 0
+        timelinePosition = 0
+        preScrubImage = nil
+    }
+
+    func scrubTimeline(to position: Int) {
+        guard let timeline, timelineVisible else { return }
+        let clamped = min(max(0, position), timelineCount)
+        timelinePosition = clamped
+        Task {
+            if let image = await timeline.frame(at: clamped) {
+                previewImage = image
+            }
+        }
+    }
+
+    enum TimelineFrameFormat: String {
+        case png, jpg, svg
+        case composite // PNG of source-at-reduced-opacity beneath the shapes
+
+        var fileExtension: String { self == .composite ? "png" : rawValue }
+
+        var contentType: UTType {
+            switch self {
+            case .png, .composite: .png
+            case .jpg: .jpeg
+            case .svg: UTType(filenameExtension: "svg") ?? .xml
+            }
+        }
+    }
+
+    func exportTimelineFrame(_ format: TimelineFrameFormat) {
+        guard let timeline, timelineVisible else { return }
+        let position = timelinePosition
+        let panel = NSSavePanel()
+        panel.title = "Export Frame"
+        panel.allowedContentTypes = [format.contentType]
+        let base = (try? Engine.defaultExportName(id: sessionId)) ?? "render"
+        let suffix = format == .composite ? "-composite" : ""
+        panel.nameFieldStringValue = "\(base)-frame\(position)\(suffix).\(format.fileExtension)"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let opacity = underlayOpacity
+        let colorful = underlayColorful
+        let transparent = transparentBackground
+        let sourcePath = inputInfo?.path
+        Task {
+            do {
+                switch format {
+                case .svg:
+                    let document = await timeline.svgDocument(at: position, includeBackground: !transparent)
+                    try document.write(to: url, atomically: true, encoding: .utf8)
+                case .png, .jpg:
+                    // JPEG has no alpha, so it always keeps the background.
+                    let withBackground = format == .jpg || !transparent
+                    guard let image = await timeline.renderFull(at: position, background: withBackground) else {
+                        throw EngineError(message: "Could not render the frame.")
+                    }
+                    try Self.writeImage(image, to: url, jpeg: format == .jpg)
+                case .composite:
+                    guard
+                        let sourcePath,
+                        let nsImage = NSImage(contentsOfFile: sourcePath),
+                        var source = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil)
+                    else { throw EngineError(message: "Could not load the source image.") }
+                    if !colorful, let gray = Self.grayscaled(source) {
+                        source = gray
+                    }
+                    guard let image = await timeline.renderComposite(
+                        at: position,
+                        source: source,
+                        sourceOpacity: opacity
+                    ) else { throw EngineError(message: "Could not render the composite.") }
+                    try Self.writeImage(image, to: url, jpeg: false)
+                }
+                toast = "Exported \(url.lastPathComponent)"
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private static func writeImage(_ image: CGImage, to url: URL, jpeg: Bool) throws {
+        let rep = NSBitmapImageRep(cgImage: image)
+        let data = jpeg
+            ? rep.representation(using: .jpeg, properties: [.compressionFactor: 0.95])
+            : rep.representation(using: .png, properties: [:])
+        guard let data else {
+            throw EngineError(message: "Image encoding failed")
+        }
+        try data.write(to: url)
+    }
+
+    private static func grayscaled(_ image: CGImage) -> CGImage? {
+        guard let context = CGContext(
+            data: nil,
+            width: image.width,
+            height: image.height,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceGray(),
+            bitmapInfo: CGImageAlphaInfo.none.rawValue
+        ) else { return nil }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        return context.makeImage()
     }
 
     // MARK: - Presets
@@ -516,7 +819,9 @@ final class AppState {
         switch event {
         case .started(let p):
             guard p.sessionId == sessionId else { return }
+            resetTimeline()
             sessionStarted = true
+            documentDirty = true
             started = p
             totalShapes = p.totalShapes
             // Pure shapes by default; in drawing mode the faint source is the
@@ -581,6 +886,32 @@ final class AppState {
         score = 0
         shapesPerSec = 0
         elapsedMs = 0
+    }
+}
+
+// MARK: - Window-close delegate chain
+
+/// Forwards everything to SwiftUI's own window delegate except
+/// windowShouldClose, which runs the unsaved-work prompt first.
+final class ClosePrompter: NSObject, NSWindowDelegate {
+    @MainActor weak var state: AppState?
+    weak var original: NSWindowDelegate?
+
+    override func forwardingTarget(for aSelector: Selector!) -> Any? {
+        original
+    }
+
+    override func responds(to aSelector: Selector!) -> Bool {
+        if aSelector == #selector(NSWindowDelegate.windowShouldClose(_:)) {
+            return true
+        }
+        return super.responds(to: aSelector) || (original?.responds(to: aSelector) ?? false)
+    }
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        MainActor.assumeIsolated {
+            state?.confirmDiscardOrSave() ?? true
+        }
     }
 }
 

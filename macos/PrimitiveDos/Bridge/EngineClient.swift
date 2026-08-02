@@ -163,6 +163,14 @@ enum Engine {
         return try callValue(LoadedDocument.self) { PrimitiveLoadDocument(cs) }
     }
 
+    /// Blocking (marshals every shape — ~12 MB JSON at 120k shapes) — call
+    /// off the main actor. Safe mid-run: one model-lock acquisition.
+    static func getShapes(id: String) throws -> ShapeDataPayload {
+        let cs = cString(id)
+        defer { free(cs) }
+        return try callValue(ShapeDataPayload.self) { PrimitiveGetShapes(cs) }
+    }
+
     /// Hot path during drawing mode — no JSON, no allocation.
     static func setDrawFocus(x: Double, y: Double, radius: Double, active: Bool) {
         PrimitiveSetDrawFocus(x, y, radius, active ? 1 : 0)

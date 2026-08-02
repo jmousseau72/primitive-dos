@@ -192,6 +192,17 @@ func PrimitiveDeletePreset(name *C.char) *C.char {
 	return ok(nil)
 }
 
+//export PrimitiveGetShapes
+func PrimitiveGetShapes(id *C.char) *C.char {
+	return withSession(id, func(s *session.RenderSession) *C.char {
+		payload, err := s.ShapeData()
+		if err != nil {
+			return fail(err)
+		}
+		return ok(payload)
+	})
+}
+
 //export PrimitiveContinueRender
 func PrimitiveContinueRender(id *C.char, paramsJSON *C.char) *C.char {
 	var p session.Params

@@ -55,6 +55,12 @@ struct PrimitiveDosApp: App {
                 .keyboardShortcut("e", modifiers: .command)
                 .disabled(!state.canExport)
 
+                Button("Export Video…") {
+                    state.showVideoExportSheet = true
+                }
+                .keyboardShortcut("e", modifiers: [.command, .shift])
+                .disabled(!state.canExportVideo)
+
                 Button(state.phase == .paused ? "Resume" : "Pause") {
                     state.phase == .paused ? state.resume() : state.pause()
                 }
@@ -89,14 +95,22 @@ struct PrimitiveDosApp: App {
 }
 
 /// Cancels any active render and closes the engine's event stream on quit;
-/// receives Finder open requests for .prim documents and images.
+/// receives Finder open requests for .prim documents and images; guards
+/// unsaved work on the way out.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor var state: AppState?
 
     @MainActor
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if let state, !state.confirmDiscardOrSave() {
+            return .terminateCancel
+        }
         state?.shutdown()
         return .terminateNow
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        true
     }
 
     @MainActor

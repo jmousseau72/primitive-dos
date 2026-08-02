@@ -11,6 +11,7 @@ struct ControlsPanel: View {
     @AppStorage("panel.shapes") private var shapesExpanded = true
     @AppStorage("panel.size") private var sizeExpanded = false
     @AppStorage("panel.color") private var colorExpanded = false
+    @AppStorage("panel.underlay") private var underlayExpanded = false
     @AppStorage("panel.advanced") private var advancedExpanded = false
     @AppStorage("panel.export") private var exportExpanded = true
 
@@ -30,6 +31,11 @@ struct ControlsPanel: View {
             }
             group("Color", isExpanded: $colorExpanded, locked: true) {
                 colorRows
+            }
+            // Underlay stays live during runs — it's a view/export setting,
+            // not an engine parameter.
+            group("Underlay", isExpanded: $underlayExpanded, locked: false) {
+                underlayRows
             }
             group("Advanced", isExpanded: $advancedExpanded, locked: true) {
                 advancedRows
@@ -116,6 +122,8 @@ struct ControlsPanel: View {
             }
         }
         .labelsHidden()
+        .pickerStyle(.menu)
+        .frame(maxWidth: .infinity)
         .onChange(of: state.selectedPreset) {
             if !state.selectedPreset.isEmpty {
                 state.applyPreset(named: state.selectedPreset)
@@ -268,6 +276,30 @@ struct ControlsPanel: View {
         if !state.bgAuto {
             ColorPicker("Background", selection: $state.bgColor, supportsOpacity: false)
         }
+        Toggle("Transparent export background", isOn: $state.transparentBackground)
+            .controlSize(.mini)
+            .help("PNG and SVG exports contain only the shapes on a transparent canvas. Rendering still optimizes against the background color; JPEG and GIF keep it.")
+        if state.transparentBackground {
+            Text("Applies to PNG and SVG exports — shapes only, for overlaying on other artwork.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var underlayRows: some View {
+        @Bindable var state = state
+        Toggle("Show under the shapes", isOn: $state.underlayVisible)
+            .controlSize(.mini)
+            .disabled(state.phase == .empty)
+        LabeledContent("Opacity") {
+            Slider(value: $state.underlayOpacity, in: 0.05...1)
+                .controlSize(.mini)
+                .frame(width: 130)
+        }
+        Toggle("Keep source colors", isOn: $state.underlayColorful)
+            .controlSize(.mini)
+            .help("Off shows the source desaturated; on keeps its full color — both apply to composite exports too")
     }
 
     @ViewBuilder
@@ -341,6 +373,11 @@ struct ControlsPanel: View {
                     .toggleStyle(.checkbox)
                     .font(.caption)
             }
+            // Forms forward row clicks to a lone toggle, silently flipping
+            // "Auto" when the user clicks anywhere on the row. Swallow row
+            // taps so only the checkbox itself toggles.
+            .contentShape(Rectangle())
+            .onTapGesture {}
             control()
                 .disabled(auto.wrappedValue)
         }

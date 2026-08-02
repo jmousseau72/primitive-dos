@@ -2,9 +2,12 @@ package session
 
 import (
 	"fmt"
+	"image"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/fogleman/gg"
 
 	"github.com/jmousseau72/primitive-dos/internal/primitive"
 )
@@ -15,6 +18,11 @@ type ExportOptions struct {
 	Formats     []string    `json:"formats"`
 	JPEGQuality int         `json:"jpegQuality"`
 	GIF         *GIFOptions `json:"gif,omitempty"`
+	// TransparentBackground omits the background from PNG and SVG output
+	// (shapes only, alpha canvas). JPEG and GIF have no alpha and keep the
+	// background regardless. Rendering still optimizes against the
+	// background color either way.
+	TransparentBackground bool `json:"transparentBackground,omitempty"`
 }
 
 type GIFOptions struct {
@@ -66,11 +74,19 @@ func (s *RenderSession) Export(opts ExportOptions) ([]string, error) {
 		var err error
 		switch strings.ToLower(format) {
 		case "png":
-			err = primitive.SavePNG(path, s.model.Context.Image())
+			if opts.TransparentBackground {
+				err = primitive.SavePNG(path, renderShapesOnly(s.model))
+			} else {
+				err = primitive.SavePNG(path, s.model.Context.Image())
+			}
 		case "jpg", "jpeg":
 			err = primitive.SaveJPG(path, s.model.Context.Image(), opts.JPEGQuality)
 		case "svg":
-			err = primitive.SaveFile(path, s.model.SVG())
+			if opts.TransparentBackground {
+				err = primitive.SaveFile(path, s.model.SVGShapesOnly())
+			} else {
+				err = primitive.SaveFile(path, s.model.SVG())
+			}
 		case "gif":
 			gifOpts := defaultGIFOptions()
 			if opts.GIF != nil {
@@ -90,6 +106,20 @@ func (s *RenderSession) Export(opts ExportOptions) ([]string, error) {
 		s.emit(EvtExported, ExportedPayload{SessionID: s.ID, Paths: paths})
 	}
 	return paths, nil
+}
+
+// renderShapesOnly draws every shape onto a transparent canvas at output
+// size — the raster counterpart of SVGShapesOnly.
+func renderShapesOnly(model *primitive.Model) image.Image {
+	dc := gg.NewContext(model.Sw, model.Sh)
+	dc.Scale(model.Scale, model.Scale)
+	dc.Translate(0.5, 0.5)
+	for i, shape := range model.Shapes {
+		c := model.Colors[i]
+		dc.SetRGBA255(c.R, c.G, c.B, c.A)
+		shape.Draw(dc, model.Scale)
+	}
+	return dc.Image()
 }
 
 // writeCheckpoint writes the numbered frame files for auto-save. Called from
