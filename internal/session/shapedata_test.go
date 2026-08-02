@@ -3,6 +3,9 @@ package session
 import (
 	"image"
 	"image/color"
+	"image/png"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/jmousseau72/primitive-dos/internal/primitive"
@@ -115,6 +118,79 @@ func TestShapeData(t *testing.T) {
 			t.Fatalf("score %d: %v != %v", i, ds.S, model.Scores[i])
 		}
 	}
+}
+
+// Transparent exports: SVG loses the background rect, PNG carries alpha.
+func TestTransparentExport(t *testing.T) {
+	dir := t.TempDir()
+
+	img := image.NewRGBA(image.Rect(0, 0, 32, 32))
+	for y := 0; y < 32; y++ {
+		for x := 0; x < 32; x++ {
+			img.Set(x, y, color.RGBA{200, uint8(y * 8), uint8(x * 8), 255})
+		}
+	}
+	model := primitive.NewModel(img, primitive.MakeHexColor("112233"), 64, 2)
+	for i := 0; i < 3; i++ {
+		model.Step(primitive.ShapeTypeTriangle, 128, 0)
+	}
+
+	s := &RenderSession{ID: "tx1", params: Params{InputPath: "unused", Mode: 1}}
+	s.model = model
+
+	paths, err := s.Export(ExportOptions{
+		Dir:                   dir,
+		BaseName:              "transparent",
+		Formats:               []string{"png", "svg"},
+		JPEGQuality:           95,
+		TransparentBackground: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) != 2 {
+		t.Fatalf("expected 2 files, got %v", paths)
+	}
+
+	svgBytes, err := os.ReadFile(paths[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(svgBytes) == "" || string(svgBytes[0:4]) != "<svg" {
+		t.Fatalf("bad svg output")
+	}
+	if containsRect := bytesContain(svgBytes, "<rect "); containsRect {
+		t.Fatal("transparent SVG still contains the background rect")
+	}
+
+	f, err := os.Open(paths[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	decoded, err := png.Decode(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bounds := decoded.Bounds()
+	transparentFound := false
+scan:
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			_, _, _, a := decoded.At(x, y).RGBA()
+			if a < 0xffff {
+				transparentFound = true
+				break scan
+			}
+		}
+	}
+	if !transparentFound {
+		t.Fatal("transparent PNG has no alpha anywhere")
+	}
+}
+
+func bytesContain(b []byte, sub string) bool {
+	return strings.Contains(string(b), sub)
 }
 
 func assertPoints(t *testing.T, got, want []float64) {

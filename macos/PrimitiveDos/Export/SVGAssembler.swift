@@ -11,13 +11,16 @@ enum SVGAssembler {
         width: Int,
         height: Int,
         scale: Double,
-        background: String
+        background: String,
+        includeBackground: Bool = true
     ) -> String {
         var lines = [String]()
         lines.reserveCapacity(shapes.count + 4)
         lines.append("<svg xmlns=\"http://www.w3.org/2000/svg\" version=\"1.1\" width=\"\(width)\" height=\"\(height)\">")
-        let bg = background.hasPrefix("#") ? String(background.dropFirst()) : background
-        lines.append("<rect x=\"0\" y=\"0\" width=\"\(width)\" height=\"\(height)\" fill=\"#\(bg)\" />")
+        if includeBackground {
+            let bg = background.hasPrefix("#") ? String(background.dropFirst()) : background
+            lines.append("<rect x=\"0\" y=\"0\" width=\"\(width)\" height=\"\(height)\" fill=\"#\(bg)\" />")
+        }
         lines.append("<g transform=\"scale(\(fmt(scale))) translate(0.5 0.5)\">")
         for shape in shapes {
             if let element = element(for: shape) {

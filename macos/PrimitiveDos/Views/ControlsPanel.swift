@@ -276,6 +276,14 @@ struct ControlsPanel: View {
         if !state.bgAuto {
             ColorPicker("Background", selection: $state.bgColor, supportsOpacity: false)
         }
+        Toggle("Transparent export background", isOn: $state.transparentBackground)
+            .controlSize(.mini)
+            .help("PNG and SVG exports contain only the shapes on a transparent canvas. Rendering still optimizes against the background color; JPEG and GIF keep it.")
+        if state.transparentBackground {
+            Text("Applies to PNG and SVG exports — shapes only, for overlaying on other artwork.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 
     @ViewBuilder

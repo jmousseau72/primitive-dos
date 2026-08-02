@@ -32,6 +32,8 @@ struct PreviewView: View {
                         .scaledToFit()
                         .opacity(state.underlayOpacity)
                         .grayscale(state.underlayColorful ? 0 : 0.5)
+                } else if state.transparentBackground {
+                    CheckerboardRect()
                 } else if let bg = state.started?.background, let color = Color(hex: bg) {
                     ContentAspectRect(color: color)
                 }
@@ -91,6 +93,28 @@ private struct ContentAspectRect: View {
         Rectangle()
             .fill(color)
             .aspectRatio(contentMode: .fit)
+    }
+}
+
+/// Classic transparency checkerboard, shown when exports will omit the
+/// background so the preview reads as "shapes on alpha".
+private struct CheckerboardRect: View {
+    var body: some View {
+        Canvas { context, size in
+            let tile: CGFloat = 8
+            let cols = Int(ceil(size.width / tile))
+            let rows = Int(ceil(size.height / tile))
+            for row in 0..<rows {
+                for col in 0..<cols where (row + col) % 2 == 0 {
+                    context.fill(
+                        Path(CGRect(x: CGFloat(col) * tile, y: CGFloat(row) * tile, width: tile, height: tile)),
+                        with: .color(.gray.opacity(0.25))
+                    )
+                }
+            }
+        }
+        .background(Color.gray.opacity(0.1))
+        .aspectRatio(contentMode: .fit)
     }
 }
 

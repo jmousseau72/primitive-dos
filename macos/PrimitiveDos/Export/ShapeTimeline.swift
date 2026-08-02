@@ -93,14 +93,15 @@ actor ShapeTimeline {
 
     /// SVG document of the prefix — same output the Go engine would produce
     /// for these shapes.
-    func svgDocument(at position: Int) -> String {
+    func svgDocument(at position: Int, includeBackground: Bool = true) -> String {
         let target = min(max(0, position), data.shapes.count)
         return SVGAssembler.svg(
             shapes: data.shapes[0..<target],
             width: data.width,
             height: data.height,
             scale: data.scale,
-            background: data.background
+            background: data.background,
+            includeBackground: includeBackground
         )
     }
 

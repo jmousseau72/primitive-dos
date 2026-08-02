@@ -146,6 +146,7 @@ struct ExportOptions: Codable, Sendable {
     var formats: [String]
     var jpegQuality = 95
     var gif: GIFOptions?
+    var transparentBackground = false
 }
 
 /// DocShape from Go: a ShapeRecord flattened together with its post-add

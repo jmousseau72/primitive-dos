@@ -35,6 +35,9 @@ final class AppState {
     var underlayVisible = false
     var underlayOpacity = 0.3
     var underlayColorful = false
+    /// Exports PNG/SVG without the background (shapes on alpha). Rendering
+    /// still optimizes against the background color.
+    var transparentBackground = false
     var toast: String?
     var errorMessage: String?
     var isExporting = false
@@ -336,7 +339,8 @@ final class AppState {
                     dir: dir,
                     baseName: baseName,
                     formats: formats,
-                    gif: formats.contains("gif") ? GIFOptions() : nil
+                    gif: formats.contains("gif") ? GIFOptions() : nil,
+                    transparentBackground: transparentBackground
                 )
                 let paths = try await Task.detached(priority: .userInitiated) {
                     try Engine.exportRender(id: id, options: options)
@@ -512,15 +516,18 @@ final class AppState {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         let opacity = underlayOpacity
         let colorful = underlayColorful
+        let transparent = transparentBackground
         let sourcePath = inputInfo?.path
         Task {
             do {
                 switch format {
                 case .svg:
-                    let document = await timeline.svgDocument(at: position)
+                    let document = await timeline.svgDocument(at: position, includeBackground: !transparent)
                     try document.write(to: url, atomically: true, encoding: .utf8)
                 case .png, .jpg:
-                    guard let image = await timeline.renderFull(at: position) else {
+                    // JPEG has no alpha, so it always keeps the background.
+                    let withBackground = format == .jpg || !transparent
+                    guard let image = await timeline.renderFull(at: position, background: withBackground) else {
                         throw EngineError(message: "Could not render the frame.")
                     }
                     try Self.writeImage(image, to: url, jpeg: format == .jpg)

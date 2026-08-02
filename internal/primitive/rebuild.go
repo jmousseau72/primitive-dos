@@ -1,5 +1,7 @@
 package primitive
 
+import "strings"
+
 // Primitive Dos addition: support for continuing a reconstructed model
 // (e.g. one reopened from a document). Shapes deserialized from disk carry
 // nil Workers and the model's working raster (Current) holds only the
@@ -24,6 +26,21 @@ func AttachWorker(shape Shape, w *Worker) {
 	case *Polygon:
 		s.Worker = w
 	}
+}
+
+// SVGShapesOnly is Model.SVG() without the background rect — a transparent
+// vector export for overlaying the shapes onto other artwork.
+func (model *Model) SVGShapesOnly() string {
+	full := model.SVG()
+	lines := strings.Split(full, "\n")
+	out := lines[:0]
+	for _, line := range lines {
+		if strings.HasPrefix(line, "<rect ") {
+			continue
+		}
+		out = append(out, line)
+	}
+	return strings.Join(out, "\n")
 }
 
 // RebuildCurrent replays every shape onto the working raster — exactly what
