@@ -94,6 +94,7 @@ struct ControlsPanel: View {
             shapesExpanded = expanded
             sizeExpanded = expanded
             colorExpanded = expanded
+            underlayExpanded = expanded
             advancedExpanded = expanded
             exportExpanded = expanded
         }
