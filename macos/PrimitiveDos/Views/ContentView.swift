@@ -7,20 +7,27 @@ struct ContentView: View {
 
     var body: some View {
         @Bindable var state = state
-        VStack(spacing: 0) {
-            PreviewView()
-            if state.timelineVisible {
-                TimelineBar()
-                    .padding(.bottom, 6)
+        // Plain HStack, not .inspector: the inspector negotiates window and
+        // column sizing on its own terms and fights every outside
+        // constraint. As a fixed-width HStack child, the sidebar simply IS
+        // 360pt — structurally, with nothing to clamp.
+        HStack(spacing: 0) {
+            VStack(spacing: 0) {
+                PreviewView()
+                if state.timelineVisible {
+                    TimelineBar()
+                        .padding(.bottom, 6)
+                }
+                StatsBar()
             }
-            StatsBar()
-        }
-        .animation(.easeInOut(duration: 0.2), value: state.timelineVisible)
-        .frame(minWidth: 560, minHeight: 480)
-        .inspector(isPresented: $showInspector) {
-            ControlsPanel()
-                // Fixed width: the sidebar is locked, not user-resizable.
-                .inspectorColumnWidth(360)
+            .animation(.easeInOut(duration: 0.2), value: state.timelineVisible)
+            .frame(minWidth: 560, maxWidth: .infinity, minHeight: 520)
+
+            if showInspector {
+                Divider()
+                ControlsPanel()
+                    .frame(width: 360)
+            }
         }
         .toolbar {
             ToolbarItemGroup {
@@ -108,20 +115,20 @@ struct ContentView: View {
                 .disabled(!state.canExport)
                 .help("Export images (⌘E)")
             }
+
+            ToolbarItem {
+                Button("Settings Panel", systemImage: "sidebar.trailing") {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showInspector.toggle()
+                    }
+                }
+                .help("Show or hide the settings panel")
+            }
         }
         .navigationTitle("Primitive Dos")
         .preferredColorScheme(AppAppearance(rawValue: appearanceMode)?.colorScheme)
         .background(WindowAccessor { window in
             state.installCloseGuard(on: window)
-            // The delegate's windowWillResize clamp is the real floor;
-            // these make the current state and system UI agree with it.
-            window.contentMinSize = NSSize(width: 940, height: 580)
-            var frame = window.frame
-            if frame.width < ClosePrompter.minimumFrame.width || frame.height < ClosePrompter.minimumFrame.height {
-                frame.size.width = max(frame.width, ClosePrompter.minimumFrame.width)
-                frame.size.height = max(frame.height, ClosePrompter.minimumFrame.height)
-                window.setFrame(frame, display: true)
-            }
         })
         .alert("Something went wrong", isPresented: errorBinding) {
             Button("OK", role: .cancel) {}
