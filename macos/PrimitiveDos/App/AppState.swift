@@ -892,8 +892,12 @@ final class AppState {
 // MARK: - Window-close delegate chain
 
 /// Forwards everything to SwiftUI's own window delegate except
-/// windowShouldClose, which runs the unsaved-work prompt first.
+/// windowShouldClose (unsaved-work prompt) and windowWillResize (hard size
+/// floor — SwiftUI can rewrite the window's minSize behind our back, but it
+/// cannot override a delegate resize veto).
 final class ClosePrompter: NSObject, NSWindowDelegate {
+    static let minimumFrame = NSSize(width: 940, height: 620)
+
     @MainActor weak var state: AppState?
     weak var original: NSWindowDelegate?
 
@@ -902,7 +906,8 @@ final class ClosePrompter: NSObject, NSWindowDelegate {
     }
 
     override func responds(to aSelector: Selector!) -> Bool {
-        if aSelector == #selector(NSWindowDelegate.windowShouldClose(_:)) {
+        if aSelector == #selector(NSWindowDelegate.windowShouldClose(_:))
+            || aSelector == #selector(NSWindowDelegate.windowWillResize(_:to:)) {
             return true
         }
         return super.responds(to: aSelector) || (original?.responds(to: aSelector) ?? false)
@@ -912,6 +917,14 @@ final class ClosePrompter: NSObject, NSWindowDelegate {
         MainActor.assumeIsolated {
             state?.confirmDiscardOrSave() ?? true
         }
+    }
+
+    func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
+        let clamped = NSSize(
+            width: max(frameSize.width, Self.minimumFrame.width),
+            height: max(frameSize.height, Self.minimumFrame.height)
+        )
+        return original?.windowWillResize?(sender, to: clamped) ?? clamped
     }
 }
 

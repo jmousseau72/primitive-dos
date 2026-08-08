@@ -113,13 +113,13 @@ struct ContentView: View {
         .preferredColorScheme(AppAppearance(rawValue: appearanceMode)?.colorScheme)
         .background(WindowAccessor { window in
             state.installCloseGuard(on: window)
-            // SwiftUI's frame minimums stop propagating reliably once
-            // .inspector is involved — enforce the floor at the AppKit
-            // level, where the window manager cannot be argued with.
+            // The delegate's windowWillResize clamp is the real floor;
+            // these make the current state and system UI agree with it.
             window.contentMinSize = NSSize(width: 940, height: 580)
-            if window.frame.width < 940 {
-                var frame = window.frame
-                frame.size.width = 940
+            var frame = window.frame
+            if frame.width < ClosePrompter.minimumFrame.width || frame.height < ClosePrompter.minimumFrame.height {
+                frame.size.width = max(frame.width, ClosePrompter.minimumFrame.width)
+                frame.size.height = max(frame.height, ClosePrompter.minimumFrame.height)
                 window.setFrame(frame, display: true)
             }
         })
@@ -190,21 +190,33 @@ struct ContentView: View {
     }
 }
 
-/// Hands the hosting NSWindow to SwiftUI code (for the close-button guard).
+/// Hands the hosting NSWindow to SwiftUI code (close-button guard, size
+/// floor). viewDidMoveToWindow fires exactly when the view attaches, so the
+/// hook cannot miss the window the way an async peek can.
 private struct WindowAccessor: NSViewRepresentable {
     let onWindow: @MainActor (NSWindow) -> Void
 
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.async {
-            if let window = view.window {
-                onWindow(window)
-            }
-        }
+    func makeNSView(context: Context) -> WindowGrabberView {
+        let view = WindowGrabberView()
+        view.onWindow = onWindow
         return view
     }
 
-    func updateNSView(_ nsView: NSView, context: Context) {}
+    func updateNSView(_ nsView: WindowGrabberView, context: Context) {}
+}
+
+final class WindowGrabberView: NSView {
+    var onWindow: (@MainActor (NSWindow) -> Void)?
+    private var delivered = false
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard !delivered, let window else { return }
+        delivered = true
+        MainActor.assumeIsolated {
+            onWindow?(window)
+        }
+    }
 }
 
 /// A floppy-disk save glyph (SF Symbols has no floppy), drawn in the same
