@@ -54,12 +54,14 @@ struct ContentView: View {
                 .disabled(!state.isBusy)
                 .help("Stop the render (⌘.) — you can still export")
 
-                if state.phase == .done {
-                    Button("Restart", systemImage: "arrow.counterclockwise") {
-                        state.start()
-                    }
-                    .help("Start over from zero shapes")
+                // Always present so the toolbar's width never changes with
+                // phase — items appearing mid-session cram the toolbar at
+                // snug window sizes.
+                Button("Restart", systemImage: "arrow.counterclockwise") {
+                    state.start()
                 }
+                .disabled(state.phase != .done)
+                .help("Start over from zero shapes")
             }
 
             ToolbarItemGroup {
