@@ -3,87 +3,86 @@
 A modern macOS app for recreating images with geometric shapes — triangles,
 rectangles, ellipses, circles, polygons, and quadratic beziers. Drop in a
 photo, watch the reconstruction paint itself shape by shape, and export the
-result as an infinitely scalable SVG (or PNG, JPEG, animated GIF).
+result as an infinitely scalable SVG (or PNG, JPEG, animated GIF, and video).
 
 Primitive Dos is a revival of the algorithm behind
 [fogleman/primitive](https://github.com/fogleman/primitive) by Michael
 Fogleman (MIT licensed), whose original macOS app is no longer available.
-The engine is vendored unmodified in `internal/primitive`; everything around
-it — the GUI, live preview, session driver, presets, native GIF encoding —
-is new.
+The engine is vendored in `internal/primitive` with minimal, documented
+additions; everything around it is new.
 
-## Why
+## Two frontends, one engine
 
-At high shape counts, the quadratic-bezier mode produces an SVG replica that
-is essentially indistinguishable from the source photo at a normal viewing
-distance — and because it is vector art, it scales to any size with zero
-quality loss.
+- **`macos/` — native SwiftUI app (primary).** macOS 26+, the Go engine
+  embedded in-process via cgo (`bridge/` builds a universal c-archive).
+  This is where new features land first.
+- **Wails app (repo root)** — Go + web-tech frontend, kept as the future
+  cross-platform (Windows) track.
+- **`cmd/primitive-cli`** — the original CLI, preserved flag-for-flag
+  (plus `-w` for bezier stroke width).
 
-## Features
+Both GUIs share presets via `~/Library/Application Support/PrimitiveDos/presets.json`.
 
-- **Drag and drop** an image (or browse) — PNG, JPEG, GIF, BMP, TIFF, WebP
-- **Live preview**: shapes stream into an inline SVG as they are found; very
-  large runs switch automatically to throttled raster snapshots
-- **Every CLI option** as a control: shape mode, count, opacity (incl. auto),
-  repeat, input resize (incl. full resolution), output size (incl. match
-  input), background color (incl. auto average), worker count, multi-stage
-  configs
-- **Run modes**: to a shape count, until stopped, until a similarity target,
-  or **drawing mode** — paint on the canvas and shapes appear under your brush
-- **Bezier stroke width** control (fixed or optimizer-varied), which the
-  upstream engine had frozen at 0.5
-- **Source underlay toggle** — see the original faintly beneath the shapes,
-  or keep the canvas pure
-- **Pause / resume / stop**, and **export at any moment** — mid-run, paused,
-  or stopped
-- **Presets**: built-ins for fast experiments and high-quality finals, plus
-  save-your-own
-- **Checkpoints**: optionally save numbered PNG/JPG/SVG frames every Nth shape
-- **Exports**: PNG · JPEG · SVG · animated GIF (encoded natively — no
-  ImageMagick required), any combination in one go
+## Features (native app)
+
+- Drag-and-drop or browse: PNG, JPEG, GIF, BMP, TIFF, WebP — or a `.prim` document
+- Live preview streaming shapes as they are found; light/dark/system appearance
+- Every engine option: shape mode, count, opacity (auto), bezier stroke width
+  (auto), repeat, input resize (full-res), output size (match input),
+  background color (average), workers, multi-stage runs, checkpoint auto-save
+- Run modes: until shape count · until stopped · until similarity % ·
+  **drawing mode** (paint on the canvas; shapes appear under the brush)
+- **`.prim` documents**: full render state (params + embedded source + every
+  shape and score), gzipped. Save mid-run, reopen with zero recompute,
+  re-export anything, **Continue** adding shapes — even in a different mode.
+  Finder shows a custom icon; double-click opens.
+- **Timeline scrubber**: slide through the shape history; export any moment
+  as PNG / JPEG / SVG / composite-over-source at full resolution
+- **Video export (⌘⇧E)**: H.264 / HEVC / ProRes of the artwork drawing
+  itself; pacing curves (slow start, linear, score-weighted), hold, size/fps
+- **Compositing tools**: tunable source underlay (opacity, color), composite
+  export, and transparent export backgrounds (shapes-on-alpha PNG/SVG)
+- Presets: built-ins for bezier workflows and classic shape-art looks;
+  custom presets with deviation badge, import/export as JSON
+- Unsaved-work guard (Save / Don't Save / Cancel) on close, quit, and clear
 
 ## Building
 
-Requirements: Go 1.25+, Node.js, and the [Wails v2 CLI](https://wails.io).
+Native app: Go 1.25+, Xcode 26+, [XcodeGen](https://github.com/yonaskolb/XcodeGen).
 
 ```
-wails build
+xcodegen generate --spec macos/project.yml --project macos
+xcodebuild -project macos/PrimitiveDos.xcodeproj -scheme PrimitiveDos build
 ```
 
-produces `build/bin/Primitive Dos.app`. For live development:
+The pre-build phase compiles the Go engine (universal arm64 + x86_64).
+All project settings live in `macos/project.yml` — the `.xcodeproj` is
+generated. Tests: `go test ./...`; end-to-end scripts in `macos/Scripts/`
+(`smoke.sh`, `smoke-video.sh`).
 
-```
-wails dev
-```
+Wails app: `wails build` (needs Node). CLI: `go build ./cmd/primitive-cli`.
 
-## Command-line interface
+## Known issues
 
-The original `primitive` CLI is preserved flag-for-flag:
+- **Settings sidebar sizing (under investigation).** The right-hand panel
+  has a history of layout instability: windows shrinking until the canvas
+  collapsed, panel width varying between sessions, and toolbar cramming
+  when phase-dependent items appeared. Root cause was SwiftUI's
+  `.inspector` negotiating window/column sizing on its own; the panel was
+  rebuilt as a plain fixed-width (360pt) `HStack` child and the AppKit
+  resize workarounds were removed. **This rewrite has not yet been fully
+  verified in daily use — treat sidebar/window sizing as an open defect
+  until it survives a real session.** See ROADMAP.md.
+- Reopened `.prim` documents show 0:00 elapsed (running time is not stored).
+- JPEG/GIF exports always include the background (no alpha in those formats).
 
-```
-go build -o primitive ./cmd/primitive-cli
-./primitive -i input.png -o output.svg -n 2000 -m 6 -a 255 -r 0 -s 1024
-```
+## Roadmap
 
-| Flag | Default | Description |
-| --- | --- | --- |
-| `i` | n/a | input file |
-| `o` | n/a | output file (repeatable; format by extension: png, jpg, svg, gif; `%d` for frames) |
-| `n` | n/a | number of shapes (repeatable for multi-stage runs) |
-| `m` | 1 | mode: 0=combo 1=triangle 2=rect 3=ellipse 4=circle 5=rotatedrect 6=beziers 7=rotatedellipse 8=polygon |
-| `rep` | 0 | extra shapes per iteration with reduced search |
-| `w` | 0.5 | bezier stroke width (0 = let the optimizer vary it) — new in Primitive Dos |
-| `nth` | 1 | save every Nth frame (with `%d` in output path) |
-| `r` | 256 | resize large input images to this size (0 = full resolution) |
-| `s` | 1024 | output image size |
-| `a` | 128 | color alpha (0 = auto per shape) |
-| `bg` | avg | starting background color (hex) |
-| `j` | 0 | parallel workers (0 = all cores) |
-| `v` / `vv` | off | verbose / very verbose output |
+Future feature ideas are tracked in [ROADMAP.md](ROADMAP.md).
 
 ## Credits
 
 - Algorithm and engine: [Michael Fogleman](https://www.michaelfogleman.com)
   — [fogleman/primitive](https://github.com/fogleman/primitive), MIT
 - App: [jmousseau72](https://github.com/jmousseau72), MIT — see [LICENSE](LICENSE)
-- Built with [Wails](https://wails.io)
+- Built with [Wails](https://wails.io), SwiftUI, and AVFoundation
