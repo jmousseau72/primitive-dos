@@ -19,11 +19,9 @@ struct ContentView: View {
         .frame(minWidth: 560, minHeight: 480)
         .inspector(isPresented: $showInspector) {
             ControlsPanel()
-                .inspectorColumnWidth(min: 320, ideal: 350, max: 440)
+                // Fixed width: the sidebar is locked, not user-resizable.
+                .inspectorColumnWidth(360)
         }
-        // Minimum applies to canvas + inspector together, so the window can
-        // never shrink the canvas into a sliver under the panel.
-        .frame(minWidth: 920, minHeight: 560)
         .toolbar {
             ToolbarItemGroup {
                 Button("Open Image", systemImage: "photo.badge.plus") {
@@ -115,6 +113,15 @@ struct ContentView: View {
         .preferredColorScheme(AppAppearance(rawValue: appearanceMode)?.colorScheme)
         .background(WindowAccessor { window in
             state.installCloseGuard(on: window)
+            // SwiftUI's frame minimums stop propagating reliably once
+            // .inspector is involved — enforce the floor at the AppKit
+            // level, where the window manager cannot be argued with.
+            window.contentMinSize = NSSize(width: 940, height: 580)
+            if window.frame.width < 940 {
+                var frame = window.frame
+                frame.size.width = 940
+                window.setFrame(frame, display: true)
+            }
         })
         .alert("Something went wrong", isPresented: errorBinding) {
             Button("OK", role: .cancel) {}
