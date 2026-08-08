@@ -907,7 +907,8 @@ final class ClosePrompter: NSObject, NSWindowDelegate {
 
     override func responds(to aSelector: Selector!) -> Bool {
         if aSelector == #selector(NSWindowDelegate.windowShouldClose(_:))
-            || aSelector == #selector(NSWindowDelegate.windowWillResize(_:to:)) {
+            || aSelector == #selector(NSWindowDelegate.windowWillResize(_:to:))
+            || aSelector == #selector(NSWindowDelegate.windowDidResize(_:)) {
             return true
         }
         return super.responds(to: aSelector) || (original?.responds(to: aSelector) ?? false)
@@ -925,6 +926,22 @@ final class ClosePrompter: NSObject, NSWindowDelegate {
             height: max(frameSize.height, Self.minimumFrame.height)
         )
         return original?.windowWillResize?(sender, to: clamped) ?? clamped
+    }
+
+    /// windowWillResize only vetoes user drags — programmatic resizes
+    /// (window restoration at launch, SwiftUI layout) bypass it. This
+    /// catches every source after the fact and pushes back up to the floor.
+    /// Recursion-safe: the corrective setFrame satisfies the guard.
+    func windowDidResize(_ notification: Notification) {
+        if let window = notification.object as? NSWindow {
+            var frame = window.frame
+            if frame.width < Self.minimumFrame.width || frame.height < Self.minimumFrame.height {
+                frame.size.width = max(frame.width, Self.minimumFrame.width)
+                frame.size.height = max(frame.height, Self.minimumFrame.height)
+                window.setFrame(frame, display: true)
+            }
+        }
+        original?.windowDidResize?(notification)
     }
 }
 
